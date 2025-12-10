@@ -7,11 +7,11 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 
 // Listar avaliações de um produto (público)
-router.get('/product/:productId', optionalAuth, (req, res) => {
+router.get('/product/:productId', optionalAuth, async (req, res) => {
   try {
     const { productId } = req.params;
     
-    const reviews = db.prepare(`
+    const reviews = await db.prepare(`
       SELECT r.*, 
              u.full_name as user_name,
              u.email as user_email
@@ -29,11 +29,11 @@ router.get('/product/:productId', optionalAuth, (req, res) => {
 });
 
 // Obter média de avaliações de um produto
-router.get('/product/:productId/average', optionalAuth, (req, res) => {
+router.get('/product/:productId/average', optionalAuth, async (req, res) => {
   try {
     const { productId } = req.params;
     
-    const result = db.prepare(`
+    const result = await db.prepare(`
       SELECT 
         COUNT(*) as total_reviews,
         AVG(rating) as average_rating
@@ -52,7 +52,7 @@ router.get('/product/:productId/average', optionalAuth, (req, res) => {
 });
 
 // Criar avaliação (requer autenticação)
-router.post('/', authenticateToken, sanitizeBody, (req, res) => {
+router.post('/', authenticateToken, sanitizeBody, async (req, res) => {
   try {
     const { product_id, order_id, rating, comment } = req.body;
     
@@ -65,7 +65,7 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
     }
     
     // Verificar se já existe avaliação deste usuário para este produto
-    const existingReview = db.prepare(`
+    const existingReview = await db.prepare(`
       SELECT id FROM reviews 
       WHERE product_id = ? AND user_id = ?
     `).get(product_id, req.user.id);
@@ -76,7 +76,7 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
     
     // Verificar se o usuário comprou o produto (se order_id for fornecido)
     if (order_id) {
-      const order = db.prepare(`
+      const order = await db.prepare(`
         SELECT oi.* FROM order_items oi
         JOIN orders o ON oi.order_id = o.id
         WHERE o.id = ? AND o.user_id = ? AND oi.product_id = ?
@@ -89,13 +89,13 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
     
     const id = uuidv4();
     
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO reviews (id, product_id, user_id, order_id, rating, comment)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, product_id, req.user.id, order_id || null, rating, comment || null);
     
     // Atualizar média de avaliações do produto (calcular e atualizar campo no produto se necessário)
-    const review = db.prepare(`
+    const review = await db.prepare(`
       SELECT r.*, 
              u.full_name as user_name,
              u.email as user_email
@@ -112,10 +112,18 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
 });
 
 // Atualizar avaliação (apenas o próprio usuário)
-router.put('/:id', authenticateToken, (req, res) => {
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
+    // Validar ID e user
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da avaliação é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     const { rating, comment } = req.body;
-    const review = db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.id);
+    const review = await db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.id);
     
     if (!review) {
       return res.status(404).json({ error: 'Avaliação não encontrada' });
@@ -138,13 +146,13 @@ router.put('/:id', authenticateToken, (req, res) => {
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(req.params.id);
     
-    db.prepare(`
+    await db.prepare(`
       UPDATE reviews 
       SET ${updates.join(', ')}
       WHERE id = ?
     `).run(...values);
     
-    const updated = db.prepare(`
+    const updated = await db.prepare(`
       SELECT r.*, 
              u.full_name as user_name,
              u.email as user_email
@@ -161,9 +169,17 @@ router.put('/:id', authenticateToken, (req, res) => {
 });
 
 // Deletar avaliação (apenas o próprio usuário ou admin)
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
-    const review = db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.id);
+    // Validar ID e user
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da avaliação é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const review = await db.prepare('SELECT * FROM reviews WHERE id = ?').get(req.params.id);
     
     if (!review) {
       return res.status(404).json({ error: 'Avaliação não encontrada' });
@@ -173,7 +189,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
       return res.status(403).json({ error: 'Você não tem permissão para deletar esta avaliação' });
     }
     
-    db.prepare('DELETE FROM reviews WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM reviews WHERE id = ?').run(req.params.id);
     res.json({ message: 'Avaliação deletada com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar avaliação:', error);
@@ -182,4 +198,3 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 export default router;
-

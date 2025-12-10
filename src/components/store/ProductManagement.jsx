@@ -261,9 +261,10 @@ export default function ProductManagement() {
             <Card key={product.id} className="overflow-hidden">
               <div className="aspect-square relative">
                 <img
-                  src={product.images?.[0] || "https://via.placeholder.com/300"}
+                  src={product.images?.[0] || PRODUCT_IMAGE_PLACEHOLDER}
                   alt={product.name}
                   className="w-full h-full object-cover"
+                  onError={(e) => handleImageError(e, PRODUCT_IMAGE_PLACEHOLDER)}
                 />
                 <div className="absolute top-2 right-2">
                   <DropdownMenu>

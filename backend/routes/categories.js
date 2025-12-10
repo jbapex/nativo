@@ -7,7 +7,7 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 
 // Listar categorias (público)
-router.get('/', optionalAuth, (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     let query = 'SELECT * FROM categories WHERE 1=1';
     const params = [];
@@ -23,14 +23,14 @@ router.get('/', optionalAuth, (req, res) => {
 
     if (req.query.active !== undefined) {
       query += ' AND active = ?';
-      params.push(req.query.active === 'true' ? 1 : 0);
+      params.push(req.query.active === 'true' ? true : false);
     } else {
-      query += ' AND active = 1';
+      query += ' AND active = true';
     }
 
     query += ' ORDER BY store_id IS NULL DESC, order_index ASC, name ASC';
 
-    const categories = db.prepare(query).all(...params);
+    const categories = await db.prepare(query).all(...params);
     res.json(categories);
   } catch (error) {
     console.error('Erro ao listar categorias:', error);
@@ -39,9 +39,14 @@ router.get('/', optionalAuth, (req, res) => {
 });
 
 // Obter categoria por ID
-router.get('/:id', optionalAuth, (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const category = db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da categoria é obrigatório' });
+    }
+
+    const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
     
     if (!category) {
       return res.status(404).json({ error: 'Categoria não encontrada' });
@@ -55,7 +60,7 @@ router.get('/:id', optionalAuth, (req, res) => {
 });
 
 // Criar categoria (admin ou lojista)
-router.post('/', authenticateToken, sanitizeBody, (req, res) => {
+router.post('/', authenticateToken, sanitizeBody, async (req, res) => {
   try {
     const { name, slug, description, icon, active, order_index, store_id } = req.body;
 
@@ -67,7 +72,7 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
     let finalStoreId = store_id || null;
     if (req.user.role === 'store') {
       // Buscar loja do usuário
-      const userStore = db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
+      const userStore = await db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
       if (!userStore) {
         return res.status(403).json({ error: 'Você precisa ter uma loja cadastrada para criar categorias' });
       }
@@ -80,7 +85,7 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
     const id = uuidv4();
     const finalSlug = slug || name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO categories (id, name, slug, description, icon, active, order_index, store_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
@@ -89,12 +94,12 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
       finalSlug,
       description || '',
       icon || '',
-      active !== undefined ? (active ? 1 : 0) : 1,
+      active !== undefined ? (active ? true : false) : true,
       order_index || 0,
       finalStoreId
     );
 
-    const category = db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
+    const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(id);
     res.status(201).json(category);
   } catch (error) {
     console.error('Erro ao criar categoria:', error);
@@ -103,9 +108,14 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
 });
 
 // Atualizar categoria (admin ou lojista dono da categoria)
-router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
+router.put('/:id', authenticateToken, sanitizeBody, async (req, res) => {
   try {
-    const category = db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da categoria é obrigatório' });
+    }
+
+    const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
     
     if (!category) {
       return res.status(404).json({ error: 'Categoria não encontrada' });
@@ -115,7 +125,7 @@ router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
     if (req.user.role !== 'admin') {
       if (category.store_id) {
         // Verificar se a categoria pertence à loja do usuário
-        const userStore = db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
+        const userStore = await db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
         if (!userStore || userStore.id !== category.store_id) {
           return res.status(403).json({ error: 'Você não tem permissão para editar esta categoria' });
         }
@@ -134,19 +144,19 @@ router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
     if (slug !== undefined) { updates.push('slug = ?'); values.push(slug); }
     if (description !== undefined) { updates.push('description = ?'); values.push(description); }
     if (icon !== undefined) { updates.push('icon = ?'); values.push(icon); }
-    if (active !== undefined) { updates.push('active = ?'); values.push(active ? 1 : 0); }
+    if (active !== undefined) { updates.push('active = ?'); values.push(active ? true : false); }
     if (order_index !== undefined) { updates.push('order_index = ?'); values.push(order_index); }
 
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(req.params.id);
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE categories 
       SET ${updates.join(', ')}
       WHERE id = ?
     `).run(...values);
 
-    const updated = db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
+    const updated = await db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
     res.json(updated);
   } catch (error) {
     console.error('Erro ao atualizar categoria:', error);
@@ -155,9 +165,14 @@ router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
 });
 
 // Deletar categoria (admin ou lojista dono da categoria)
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
-    const category = db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da categoria é obrigatório' });
+    }
+
+    const category = await db.prepare('SELECT * FROM categories WHERE id = ?').get(req.params.id);
     
     if (!category) {
       return res.status(404).json({ error: 'Categoria não encontrada' });
@@ -167,7 +182,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
     if (req.user.role !== 'admin') {
       if (category.store_id) {
         // Verificar se a categoria pertence à loja do usuário
-        const userStore = db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
+        const userStore = await db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
         if (!userStore || userStore.id !== category.store_id) {
           return res.status(403).json({ error: 'Você não tem permissão para deletar esta categoria' });
         }
@@ -177,7 +192,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
       }
     }
 
-    db.prepare('DELETE FROM categories WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM categories WHERE id = ?').run(req.params.id);
     res.json({ message: 'Categoria deletada com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar categoria:', error);

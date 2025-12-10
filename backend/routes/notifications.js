@@ -6,15 +6,20 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 
 // Listar notificações do usuário
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
+    // Validar user
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     const { unread_only, limit } = req.query;
     
     let query = 'SELECT * FROM notifications WHERE user_id = ?';
     const params = [req.user.id];
     
     if (unread_only === 'true') {
-      query += ' AND read = 0';
+      query += ' AND read = false';
     }
     
     query += ' ORDER BY created_at DESC';
@@ -24,7 +29,7 @@ router.get('/', authenticateToken, (req, res) => {
       params.push(parseInt(limit));
     }
     
-    const notifications = db.prepare(query).all(...params);
+    const notifications = await db.prepare(query).all(...params);
     res.json(notifications);
   } catch (error) {
     console.error('Erro ao buscar notificações:', error);
@@ -33,12 +38,17 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Contar notificações não lidas
-router.get('/unread/count', authenticateToken, (req, res) => {
+router.get('/unread/count', authenticateToken, async (req, res) => {
   try {
-    const count = db.prepare(`
+    // Validar user
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const count = await db.prepare(`
       SELECT COUNT(*) as count 
       FROM notifications 
-      WHERE user_id = ? AND read = 0
+      WHERE user_id = ? AND read = false
     `).get(req.user.id);
     
     res.json({ count: count.count || 0 });
@@ -49,9 +59,17 @@ router.get('/unread/count', authenticateToken, (req, res) => {
 });
 
 // Marcar notificação como lida
-router.put('/:id/read', authenticateToken, (req, res) => {
+router.put('/:id/read', authenticateToken, async (req, res) => {
   try {
-    const notification = db.prepare('SELECT * FROM notifications WHERE id = ?').get(req.params.id);
+    // Validar ID e user
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da notificação é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const notification = await db.prepare('SELECT * FROM notifications WHERE id = ?').get(req.params.id);
     
     if (!notification) {
       return res.status(404).json({ error: 'Notificação não encontrada' });
@@ -61,7 +79,7 @@ router.put('/:id/read', authenticateToken, (req, res) => {
       return res.status(403).json({ error: 'Acesso negado' });
     }
     
-    db.prepare('UPDATE notifications SET read = 1 WHERE id = ?').run(req.params.id);
+    await db.prepare('UPDATE notifications SET read = true WHERE id = ?').run(req.params.id);
     
     res.json({ message: 'Notificação marcada como lida' });
   } catch (error) {
@@ -71,9 +89,14 @@ router.put('/:id/read', authenticateToken, (req, res) => {
 });
 
 // Marcar todas como lidas
-router.put('/read-all', authenticateToken, (req, res) => {
+router.put('/read-all', authenticateToken, async (req, res) => {
   try {
-    db.prepare('UPDATE notifications SET read = 1 WHERE user_id = ?').run(req.user.id);
+    // Validar user
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    await db.prepare('UPDATE notifications SET read = true WHERE user_id = ?').run(req.user.id);
     res.json({ message: 'Todas as notificações foram marcadas como lidas' });
   } catch (error) {
     console.error('Erro ao marcar todas como lidas:', error);
@@ -82,9 +105,17 @@ router.put('/read-all', authenticateToken, (req, res) => {
 });
 
 // Deletar notificação
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
-    const notification = db.prepare('SELECT * FROM notifications WHERE id = ?').get(req.params.id);
+    // Validar ID e user
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da notificação é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const notification = await db.prepare('SELECT * FROM notifications WHERE id = ?').get(req.params.id);
     
     if (!notification) {
       return res.status(404).json({ error: 'Notificação não encontrada' });
@@ -94,7 +125,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
       return res.status(403).json({ error: 'Acesso negado' });
     }
     
-    db.prepare('DELETE FROM notifications WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM notifications WHERE id = ?').run(req.params.id);
     res.json({ message: 'Notificação deletada' });
   } catch (error) {
     console.error('Erro ao deletar notificação:', error);
@@ -103,10 +134,10 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 // Função auxiliar para criar notificação (usada por outras rotas)
-export function createNotification(userId, type, title, message, link = null) {
+export async function createNotification(userId, type, title, message, link = null) {
   try {
     const id = uuidv4();
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO notifications (id, user_id, type, title, message, link)
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(id, userId, type, title, message, link);

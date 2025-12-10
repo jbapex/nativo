@@ -42,10 +42,14 @@ export default function SalesChart({ data, loading }) {
         if (startDate && startDate <= monthEnd && endDate >= monthStart && sub.status === 'active') {
           const plan = plansMap[sub.plan_id];
           if (plan) {
+            // Converter valores para números (podem vir como string do PostgreSQL)
+            const planPrice = parseFloat(plan.price) || 0;
+            const planYearlyPrice = parseFloat(plan.yearly_price) || 0;
+            
             // Se for cobrança anual, dividir por 12 para ter o valor mensal
             const monthlyValue = sub.billing_cycle === 'yearly' 
-              ? (plan.yearly_price || plan.price * 12) / 12 
-              : plan.price;
+              ? (planYearlyPrice || planPrice * 12) / 12 
+              : planPrice;
             
             return total + monthlyValue;
           }
@@ -53,9 +57,12 @@ export default function SalesChart({ data, loading }) {
         return total;
       }, 0);
 
+      // Garantir que monthRevenue é um número antes de usar toFixed
+      const revenueNumber = Number(monthRevenue) || 0;
+
       return {
         name: `${month}/${year.toString().slice(2)}`,
-        valor: Number(monthRevenue.toFixed(2))
+        valor: Number(revenueNumber.toFixed(2))
       };
     });
   }, [data, loading]);

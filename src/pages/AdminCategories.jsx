@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Category } from "@/api/entities";
+import { CategoryAttributes } from "@/api/apiClient";
 import AdminLayout from "../components/admin/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tags, Plus, Search, GripVertical, AlertCircle, CheckCircle, Pencil, Trash2 } from "lucide-react";
+import { Tags, Plus, Search, GripVertical, AlertCircle, CheckCircle, Pencil, Trash2, Settings } from "lucide-react";
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -50,6 +51,22 @@ export default function AdminCategories() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  
+  // Estados para gerenciar atributos
+  const [attributesDialogOpen, setAttributesDialogOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [categoryAttributes, setCategoryAttributes] = useState([]);
+  const [attributeFormData, setAttributeFormData] = useState({
+    name: "",
+    label: "",
+    type: "text",
+    options: "",
+    is_filterable: true,
+    is_required: false,
+    order_index: 0
+  });
+  const [isEditingAttribute, setIsEditingAttribute] = useState(false);
+  const [attributeToDelete, setAttributeToDelete] = useState(null);
   
   const [formData, setFormData] = useState({
     name: "",
@@ -158,6 +175,119 @@ export default function AdminCategories() {
       active: true
     });
     setIsEditing(false);
+  };
+
+  // Funções para gerenciar atributos
+  const handleManageAttributes = async (category) => {
+    setSelectedCategory(category);
+    setAttributesDialogOpen(true);
+    await loadCategoryAttributes(category.id);
+  };
+
+  const loadCategoryAttributes = async (categoryId) => {
+    try {
+      const attrs = await CategoryAttributes.listByCategory(categoryId);
+      setCategoryAttributes(attrs || []);
+    } catch (error) {
+      console.error("Erro ao carregar atributos:", error);
+      setError("Erro ao carregar atributos da categoria");
+    }
+  };
+
+  const handleAttributeSubmit = async (e) => {
+    e.preventDefault();
+    if (!selectedCategory) {
+      console.error("❌ Nenhuma categoria selecionada");
+      setError("Nenhuma categoria selecionada");
+      return;
+    }
+
+    try {
+      console.log("📝 Dados do formulário:", attributeFormData);
+      
+      const optionsValue = attributeFormData.options 
+        ? (attributeFormData.type === 'select' || attributeFormData.type === 'multi-select'
+            ? JSON.stringify(attributeFormData.options.split(',').map(opt => opt.trim()).filter(opt => opt))
+            : null)
+        : null;
+
+      const attributeData = {
+        category_id: selectedCategory.id,
+        name: attributeFormData.name.toLowerCase().replace(/\s+/g, '_'),
+        label: attributeFormData.label || attributeFormData.name,
+        type: attributeFormData.type,
+        options: optionsValue,
+        is_filterable: attributeFormData.is_filterable,
+        is_required: attributeFormData.is_required,
+        order_index: attributeFormData.order_index || categoryAttributes.length
+      };
+
+      console.log("📤 Dados sendo enviados:", attributeData);
+
+      if (isEditingAttribute) {
+        console.log("🔄 Atualizando atributo:", attributeFormData.id);
+        await CategoryAttributes.update(attributeFormData.id, attributeData);
+        setSuccess("Atributo atualizado com sucesso!");
+      } else {
+        console.log("➕ Criando novo atributo");
+        const created = await CategoryAttributes.create(attributeData);
+        console.log("✅ Atributo criado:", created);
+        setSuccess("Atributo criado com sucesso!");
+      }
+
+      await loadCategoryAttributes(selectedCategory.id);
+      resetAttributeForm();
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (error) {
+      console.error("❌ Erro ao salvar atributo:", error);
+      console.error("Detalhes do erro:", error.details || error.message);
+      setError(`Erro ao salvar atributo: ${error.message || "Verifique os dados."}`);
+    }
+  };
+
+  const handleEditAttribute = (attr) => {
+    const optionsStr = attr.options 
+      ? (typeof attr.options === 'string' ? JSON.parse(attr.options) : attr.options).join(', ')
+      : '';
+    
+    setAttributeFormData({
+      id: attr.id,
+      name: attr.name,
+      label: attr.label || attr.name,
+      type: attr.type,
+      options: optionsStr,
+      is_filterable: attr.is_filterable,
+      is_required: attr.is_required,
+      order_index: attr.order_index || 0
+    });
+    setIsEditingAttribute(true);
+  };
+
+  const handleDeleteAttribute = async () => {
+    if (!attributeToDelete) return;
+    try {
+      await CategoryAttributes.remove(attributeToDelete.id);
+      setSuccess("Atributo excluído com sucesso!");
+      await loadCategoryAttributes(selectedCategory.id);
+      setAttributeToDelete(null);
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (error) {
+      console.error("Erro ao excluir atributo:", error);
+      setError("Erro ao excluir atributo");
+    }
+  };
+
+  const resetAttributeForm = () => {
+    setAttributeFormData({
+      name: "",
+      label: "",
+      type: "text",
+      options: "",
+      is_filterable: true,
+      is_required: false,
+      order_index: 0
+    });
+    setIsEditingAttribute(false);
   };
 
   const toggleStatus = async (category) => {
@@ -308,6 +438,15 @@ export default function AdminCategories() {
                                       <Button 
                                         variant="ghost" 
                                         size="sm"
+                                        onClick={() => handleManageAttributes(category)}
+                                        title="Gerenciar atributos"
+                                      >
+                                        <Settings className="w-4 h-4 mr-1" />
+                                        Atributos
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
                                         onClick={() => handleEdit(category)}
                                       >
                                         <Pencil className="w-4 h-4 mr-1" />
@@ -440,6 +579,207 @@ export default function AdminCategories() {
             </AlertDialogCancel>
             <AlertDialogAction 
               onClick={confirmDelete}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de gerenciamento de atributos */}
+      <Dialog open={attributesDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          resetAttributeForm();
+          setSelectedCategory(null);
+          setCategoryAttributes([]);
+        }
+        setAttributesDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Gerenciar Atributos - {selectedCategory?.name}
+            </DialogTitle>
+            <p className="text-sm text-gray-500">
+              Configure os atributos que aparecerão no formulário de cadastro de produtos desta categoria.
+            </p>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Formulário de atributo */}
+            <div className="border rounded-lg p-4 bg-gray-50">
+              <h3 className="font-semibold mb-4">
+                {isEditingAttribute ? "Editar Atributo" : "Novo Atributo"}
+              </h3>
+              <form onSubmit={handleAttributeSubmit} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Nome Técnico*</label>
+                    <Input
+                      required
+                      value={attributeFormData.name}
+                      onChange={(e) => setAttributeFormData({ ...attributeFormData, name: e.target.value })}
+                      placeholder="ex: tamanho, ano, marca"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Sem espaços, use underscore (_)</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Rótulo (Label)*</label>
+                    <Input
+                      required
+                      value={attributeFormData.label}
+                      onChange={(e) => setAttributeFormData({ ...attributeFormData, label: e.target.value })}
+                      placeholder="ex: Tamanho, Ano, Marca"
+                    />
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Tipo*</label>
+                    <Select
+                      value={attributeFormData.type}
+                      onValueChange={(value) => setAttributeFormData({ ...attributeFormData, type: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="text">Texto</SelectItem>
+                        <SelectItem value="select">Seleção (Select)</SelectItem>
+                        <SelectItem value="multi-select">Múltipla Seleção</SelectItem>
+                        <SelectItem value="range">Faixa (Range)</SelectItem>
+                        <SelectItem value="number">Número</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Ordem</label>
+                    <Input
+                      type="number"
+                      value={attributeFormData.order_index}
+                      onChange={(e) => setAttributeFormData({ ...attributeFormData, order_index: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                </div>
+
+                {(attributeFormData.type === 'select' || attributeFormData.type === 'multi-select') && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Opções (separadas por vírgula)*</label>
+                    <Input
+                      required
+                      value={attributeFormData.options}
+                      onChange={(e) => setAttributeFormData({ ...attributeFormData, options: e.target.value })}
+                      placeholder="ex: P, M, G, GG ou 2018, 2019, 2020"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Separe as opções com vírgula</p>
+                  </div>
+                )}
+
+                <div className="flex gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={attributeFormData.is_filterable}
+                      onCheckedChange={(checked) => setAttributeFormData({ ...attributeFormData, is_filterable: checked })}
+                    />
+                    <label className="text-sm">Aparecer nos filtros laterais</label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      checked={attributeFormData.is_required}
+                      onCheckedChange={(checked) => setAttributeFormData({ ...attributeFormData, is_required: checked })}
+                    />
+                    <label className="text-sm">Obrigatório no cadastro</label>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <Button type="submit">
+                    {isEditingAttribute ? "Atualizar" : "Criar"} Atributo
+                  </Button>
+                  {isEditingAttribute && (
+                    <Button type="button" variant="outline" onClick={resetAttributeForm}>
+                      Cancelar Edição
+                    </Button>
+                  )}
+                </div>
+              </form>
+            </div>
+
+            {/* Lista de atributos existentes */}
+            <div>
+              <h3 className="font-semibold mb-4">Atributos Cadastrados ({categoryAttributes.length})</h3>
+              {categoryAttributes.length === 0 ? (
+                <p className="text-gray-500 text-sm">Nenhum atributo cadastrado ainda.</p>
+              ) : (
+                <div className="space-y-2">
+                  {categoryAttributes.map((attr) => (
+                    <div key={attr.id} className="border rounded-lg p-3 flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="font-medium">{attr.label || attr.name}</div>
+                        <div className="text-sm text-gray-500">
+                          Tipo: {attr.type} | 
+                          {attr.is_filterable ? " Filtro: Sim" : " Filtro: Não"} | 
+                          {attr.is_required ? " Obrigatório: Sim" : " Obrigatório: Não"}
+                        </div>
+                        {attr.options && (
+                          <div className="text-xs text-gray-400 mt-1">
+                            Opções: {typeof attr.options === 'string' ? JSON.parse(attr.options).join(', ') : attr.options.join(', ')}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditAttribute(attr)}
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setAttributeToDelete(attr)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAttributesDialogOpen(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de confirmação de exclusão de atributo */}
+      <AlertDialog open={!!attributeToDelete} onOpenChange={(open) => {
+        if (!open) setAttributeToDelete(null);
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o atributo "{attributeToDelete?.label || attributeToDelete?.name}"?
+              <br />
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAttributeToDelete(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteAttribute}
               className="bg-red-600 hover:bg-red-700"
             >
               Excluir

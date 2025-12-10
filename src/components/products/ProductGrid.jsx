@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingBag, Store, MessageCircle, Heart, Clock, Check, Star, Eye, Download } from "lucide-react";
+import { ShoppingBag, Store, MessageCircle, Heart, Clock, Check, Star, Eye, Download, Truck, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { User } from "@/api/entities";
+import { User, Reviews } from "@/api/entities";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -16,8 +16,9 @@ import { Label } from "@/components/ui/label";
 import { Search } from "lucide-react";
 import LoginDialog from "@/components/LoginDialog";
 import CountdownTimer from "@/components/products/CountdownTimer";
+import { trackProduct } from "@/utils/navigationTracker";
 
-export default function ProductGrid({ products, loading, emptyMessage }) {
+export default function ProductGrid({ products, loading, emptyMessage, appearanceSettings = {}, hideHeader = false }) {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [favorites, setFavorites] = useState([]);
@@ -28,6 +29,7 @@ export default function ProductGrid({ products, loading, emptyMessage }) {
   const [exportSearchTerm, setExportSearchTerm] = useState("");
   const [exportCategory, setExportCategory] = useState("all");
   const [exportStore, setExportStore] = useState("all");
+  const [productRatings, setProductRatings] = useState({});
 
   useEffect(() => {
     checkUser();
@@ -43,6 +45,35 @@ export default function ProductGrid({ products, loading, emptyMessage }) {
       window.removeEventListener('authChanged', handleAuthChange);
     };
   }, []);
+
+  // Carregar avaliações dos produtos
+  useEffect(() => {
+    if (!products || products.length === 0) return;
+
+    const loadRatings = async () => {
+      try {
+        const ratingsPromises = products.map(async (product) => {
+          try {
+            const rating = await Reviews.getAverage(product.id);
+            return { productId: product.id, rating };
+          } catch (error) {
+            return { productId: product.id, rating: { average_rating: 0, total_reviews: 0 } };
+          }
+        });
+        
+        const ratings = await Promise.all(ratingsPromises);
+        const ratingsMap = {};
+        ratings.forEach(({ productId, rating }) => {
+          ratingsMap[productId] = rating;
+        });
+        setProductRatings(ratingsMap);
+      } catch (error) {
+        console.error("Erro ao carregar avaliações:", error);
+      }
+    };
+
+    loadRatings();
+  }, [products]);
 
   const checkUser = async () => {
     try {
@@ -157,7 +188,7 @@ export default function ProductGrid({ products, loading, emptyMessage }) {
       <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
         {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
           <Card key={i} className="overflow-hidden">
-            <Skeleton className="h-36 sm:h-48 w-full" />
+            <Skeleton className="h-48 sm:h-64 w-full" />
             <CardContent className="p-3 sm:p-4">
               <Skeleton className="h-5 w-3/4 mb-2" />
               <Skeleton className="h-4 w-1/2 mb-3" />
@@ -321,25 +352,27 @@ export default function ProductGrid({ products, loading, emptyMessage }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-4">
-        <h2 className="text-2xl font-bold">Produtos para você</h2>
-        <div className="flex items-center gap-4">
-          <div className="text-sm text-gray-500">
-            {products.length} produtos encontrados
+      {!hideHeader && (
+        <div className="flex justify-between items-center flex-wrap gap-4">
+          <h2 className="text-2xl font-bold">Produtos para você</h2>
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-gray-500">
+              {products.length} produtos encontrados
+            </div>
+            {products.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportClick}
+                className="gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Exportar produtos
+              </Button>
+            )}
           </div>
-          {products.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportClick}
-              className="gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Exportar produtos
-            </Button>
-          )}
         </div>
-      </div>
+      )}
       
       <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
         {products.map((product, index) => (
@@ -351,21 +384,64 @@ export default function ProductGrid({ products, loading, emptyMessage }) {
             whileHover={{ y: -5 }}
             className="h-full"
           >
-            <Link to={`/produto/${product.id}`} className="h-full block">
-              <Card className="overflow-hidden h-full border border-gray-100 hover:border-blue-300 hover:shadow-md transition-all duration-300 group">
+            <Link 
+              to={`/produto/${product.id}`} 
+              className="h-full block"
+              onClick={() => trackProduct(product)}
+            >
+              <Card className="overflow-hidden h-full border hover:shadow-md transition-all duration-300 group"
+                    style={{
+                      borderColor: appearanceSettings.cardBorderColor || '#f3f4f6',
+                      backgroundColor: appearanceSettings.cardBackgroundColor || '#ffffff',
+                      boxShadow: appearanceSettings.cardShadowColor || '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = appearanceSettings.inputFocusColor || '#93c5fd';
+                      e.currentTarget.style.boxShadow = `0 4px 6px ${appearanceSettings.cardShadowColor || 'rgba(0, 0, 0, 0.1)'}`;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = appearanceSettings.cardBorderColor || '#f3f4f6';
+                      e.currentTarget.style.boxShadow = appearanceSettings.cardShadowColor || '0 1px 3px 0 rgba(0, 0, 0, 0.1)';
+                    }}>
                 <div className="relative">
                   <img
                     src={product.images?.[0] || product.image_url || "https://placehold.co/300x300/e2e8f0/a1a1aa?text=Sem+Imagem"}
                     alt={product.name}
-                    className="w-full h-36 xs:h-40 sm:h-48 md:h-52 object-cover group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-48 xs:h-56 sm:h-64 md:h-72 object-cover group-hover:scale-105 transition-transform duration-500"
                   />
                   
                   <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                   
-                  {/* Garantir que nenhum "0" seja renderizado */}
-                  {product.compare_price && product.compare_price > product.price ? (
+                  {/* Etiqueta de Desconto da Campanha (amarela com raio) */}
+                  {product.campaign && product.campaign.discount_percent && (
+                    <div className="absolute top-2 left-2 z-20 bg-yellow-400 flex items-center gap-1 px-2 py-1 rounded-sm shadow-md">
+                      <Zap className="w-3 h-3 text-orange-500 fill-orange-500" />
+                      <span className="text-orange-600 font-bold text-sm">
+                        -{Math.round(product.campaign.discount_percent)}%
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Badge de Campanha (se não houver desconto percentual) */}
+                  {product.campaign && !product.campaign.discount_percent && (
+                    <Badge 
+                      className="absolute top-2 left-2 text-white font-bold text-xs px-2 py-1 z-10"
+                      style={{
+                        backgroundColor: product.campaign.badge_color || "#EF4444",
+                      }}
+                    >
+                      {product.campaign.badge_text || "EM PROMOÇÃO"}
+                    </Badge>
+                  )}
+                  
+                  {/* Badge de Desconto (se não houver campanha ou se houver desconto adicional) */}
+                  {!product.campaign && product.compare_price && product.compare_price > product.price ? (
                     <Badge className="absolute top-2 left-2 bg-red-500 text-white font-medium">
                       {Math.round((1 - product.price / product.compare_price) * 100)}% OFF
+                    </Badge>
+                  ) : product.campaign && product.compare_price && product.compare_price > product.price ? (
+                    <Badge className="absolute top-2 left-2 bg-orange-500 text-white font-medium text-xs">
+                      +{Math.round((1 - product.price / product.compare_price) * 100)}% OFF
                     </Badge>
                   ) : null}
                   
@@ -402,37 +478,79 @@ export default function ProductGrid({ products, loading, emptyMessage }) {
                 </div>
 
                 <CardContent className="p-3 sm:p-4">
-                  {/* Garantir que não há elementos renderizando "0" */}
+                  {/* Nome do Produto */}
                   {product.name && (
-                    <h3 className="font-semibold text-sm sm:text-base line-clamp-1 group-hover:text-blue-600 transition-colors">
+                    <h3 className="font-semibold text-sm sm:text-base line-clamp-2 group-hover:text-blue-600 transition-colors mb-2 min-h-[2.5rem]">
                       {product.name}
                     </h3>
                   )}
-                  <p className="text-xs sm:text-sm text-gray-500 line-clamp-1 sm:line-clamp-2 mb-1 sm:mb-2 h-4 sm:h-8">
-                    {product.description}
-                  </p>
                   
-                  <div className="flex items-center justify-between mt-1 sm:mt-2">
-                    <div>
-                      {product.compare_price && product.compare_price > product.price ? (
-                        <>
+                  {/* Avaliação com Estrelas */}
+                  {productRatings[product.id] && productRatings[product.id].total_reviews > 0 && (
+                    <div className="flex items-center gap-1.5 mb-2">
+                      <div className="flex items-center gap-0.5">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const avgRating = Number(productRatings[product.id].average_rating) || 0;
+                          return (
+                            <Star
+                              key={star}
+                              className={`w-3 h-3 ${
+                                star <= Math.round(avgRating)
+                                  ? "text-yellow-400 fill-yellow-400"
+                                  : "text-gray-300"
+                              }`}
+                            />
+                          );
+                        })}
+                      </div>
+                      <span className="text-xs text-gray-600">
+                        {(Number(productRatings[product.id].average_rating) || 0).toFixed(1)} ({productRatings[product.id].total_reviews})
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Preços - De/Por */}
+                  <div className="mb-2">
+                    {product.compare_price && product.compare_price > product.price ? (
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">De:</span>
                           <span className="text-xs text-gray-400 line-through">
                             {formatCurrency(product.compare_price)}
                           </span>
-                          <span className="text-sm sm:text-base font-bold text-green-600 block">
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Por:</span>
+                          <span className="text-base sm:text-lg font-bold text-green-600">
                             {formatCurrency(product.price)}
                           </span>
-                        </>
-                      ) : (
-                        <span className="text-sm sm:text-base font-bold text-green-600">
-                          {formatCurrency(product.price)}
-                        </span>
-                      )}
+                        </div>
+                        {Math.round((1 - product.price / product.compare_price) * 100) > 0 && (
+                          <span className="text-xs font-semibold text-red-600">
+                            Economize {formatCurrency(product.compare_price - product.price)}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-base sm:text-lg font-bold text-gray-900">
+                        {formatCurrency(product.price)}
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Informações Adicionais */}
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 mb-2">
+                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <Truck className="w-3 h-3" />
+                      <span>Frete calculado</span>
                     </div>
-                    <div className="flex items-center text-xs text-gray-600">
-                      <Store className="w-3 h-3 mr-1 text-blue-600" />
-                      <span className="hidden xs:inline truncate max-w-[60px] sm:max-w-full">{product.store_name}</span>
-                    </div>
+                    {product.stock !== null && product.stock !== undefined && (
+                      <span className={`text-xs font-medium ${
+                        product.stock > 10 ? "text-green-600" : product.stock > 0 ? "text-orange-600" : "text-red-600"
+                      }`}>
+                        {product.stock > 0 ? `${product.stock} em estoque` : "Esgotado"}
+                      </span>
+                    )}
                   </div>
                   
                   <button
@@ -441,7 +559,11 @@ export default function ProductGrid({ products, loading, emptyMessage }) {
                       e.stopPropagation();
                       navigate(`/produto/${product.id}`);
                     }}
-                    className="w-full mt-2 sm:mt-3 py-1.5 sm:py-2 rounded-lg flex items-center justify-center gap-1 sm:gap-2 bg-blue-500 hover:bg-blue-600 text-white font-medium transition-colors text-xs sm:text-sm"
+                    className="w-full mt-2 sm:mt-3 py-1.5 sm:py-2 rounded-lg flex items-center justify-center gap-1 sm:gap-2 font-medium transition-all duration-200 text-xs sm:text-sm hover:opacity-90 hover:shadow-md"
+                    style={{
+                      backgroundColor: appearanceSettings.buttonPrimaryColor || '#2563eb',
+                      color: appearanceSettings.buttonTextColor || '#ffffff'
+                    }}
                   >
                     <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
                     Ver Produto

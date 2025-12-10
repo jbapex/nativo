@@ -13,10 +13,19 @@ import {
   ArrowLeft,
   Home,
   Store as StoreIconLucide,
-  CreditCard
+  CreditCard,
+  Megaphone,
+  Link as LinkIcon
 } from "lucide-react";
 
 export default function StoreLayout({ children, store, plan, isStoreOnlineActive }) {
+  console.log("🏗️ StoreLayout: Renderizando", { 
+    hasStore: !!store, 
+    hasPlan: !!plan, 
+    isStoreOnlineActive,
+    storeName: store?.name 
+  });
+  
   const location = useLocation();
   const navigate = useNavigate();
   const currentPath = location.pathname;
@@ -58,6 +67,16 @@ export default function StoreLayout({ children, store, plan, isStoreOnlineActive
       page: "marketing",
     },
     {
+      name: "Campanhas",
+      icon: <Megaphone className="w-5 h-5" />,
+      page: "campaigns",
+    },
+    {
+      name: "Personalizar Link",
+      icon: <LinkIcon className="w-5 h-5" />,
+      page: "custom-link",
+    },
+    {
       name: "Configurações",
       icon: <Settings className="w-5 h-5" />,
       page: "settings",
@@ -65,7 +84,22 @@ export default function StoreLayout({ children, store, plan, isStoreOnlineActive
   ];
 
   const getPageFromUrl = () => {
-    const urlParams = new URLSearchParams(window.location.search);
+    const path = location.pathname;
+    
+    // Mapear rotas para páginas
+    if (path.includes('/produtos') || path.includes('/products')) return 'products';
+    if (path.includes('/pedidos') || path.includes('/orders')) return 'orders';
+    if (path.includes('/estatisticas') || path.includes('/analytics')) return 'analytics';
+    if (path.includes('/marketing')) return 'marketing';
+    if (path.includes('/campanhas') || path.includes('/campaigns')) return 'campaigns';
+    if (path.includes('/assinatura') || path.includes('/subscription')) return 'subscription';
+    if (path.includes('/configuracoes') || path.includes('/settings')) return 'settings';
+    if (path.includes('/online')) return 'online';
+    if (path.includes('/link-personalizado') || path.includes('/custom-link')) return 'custom-link';
+    if (path.includes('/dashboard') || path.includes('/perfil') || path.includes('/profile')) return 'dashboard';
+    
+    // Fallback para query params (compatibilidade)
+    const urlParams = new URLSearchParams(location.search);
     return urlParams.get('page') || 'dashboard';
   };
 
@@ -75,7 +109,22 @@ export default function StoreLayout({ children, store, plan, isStoreOnlineActive
   };
 
   const handleMenuClick = (page) => {
-    navigate(`${createPageUrl("StoreProfile")}?page=${page}`);
+    // Mapear páginas para rotas
+    const routeMap = {
+      'dashboard': '/loja/dashboard',
+      'products': '/loja/produtos',
+      'orders': '/loja/pedidos',
+      'analytics': '/loja/estatisticas',
+      'marketing': '/loja/marketing',
+      'campaigns': '/loja/campanhas',
+      'subscription': '/loja/assinatura',
+      'settings': '/loja/configuracoes',
+      'online': '/loja/online',
+      'custom-link': '/loja/link-personalizado'
+    };
+    
+    const route = routeMap[page] || `/loja/${page}`;
+    navigate(route);
   };
 
   // Botão mobile para retornar à página inicial
@@ -91,8 +140,14 @@ export default function StoreLayout({ children, store, plan, isStoreOnlineActive
     </Button>
   );
 
+  console.log("🏗️ StoreLayout: Renderizando JSX", { 
+    hasChildren: !!children,
+    childrenType: typeof children,
+    storeName: store?.name 
+  });
+  
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50" style={{ minHeight: '100vh' }}>
       {/* Sidebar */}
       <div className="hidden md:flex flex-col w-64 bg-white border-r">
         <div className="flex items-center justify-between h-16 px-4 border-b">
@@ -188,8 +243,17 @@ export default function StoreLayout({ children, store, plan, isStoreOnlineActive
           </div>
         </div>
         
-        <main className="flex-1 p-4 sm:p-6">
-          {children}
+        <main className="flex-1 p-4 sm:p-6 overflow-y-auto" style={{ backgroundColor: '#f9fafb', minHeight: '400px' }}>
+          {children ? (
+            <div style={{ minHeight: '200px' }}>
+              {children}
+            </div>
+          ) : (
+            <div className="p-8 text-center text-gray-500 bg-yellow-50 border-2 border-yellow-200 rounded">
+              <p className="font-bold">⚠️ AVISO: Nenhum conteúdo foi passado para StoreLayout</p>
+              <p className="text-sm mt-2">Isso não deveria acontecer. Verifique os logs do console.</p>
+            </div>
+          )}
         </main>
       </div>
     </div>

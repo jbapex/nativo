@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 
 // Listar assinaturas
-router.get('/', optionalAuth, (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     let query = `
       SELECT s.*, 
@@ -32,7 +32,7 @@ router.get('/', optionalAuth, (req, res) => {
 
     query += ' ORDER BY s.created_at DESC';
 
-    const subscriptions = db.prepare(query).all(...params);
+    const subscriptions = await db.prepare(query).all(...params);
     res.json(subscriptions);
   } catch (error) {
     console.error('Erro ao listar assinaturas:', error);
@@ -41,9 +41,14 @@ router.get('/', optionalAuth, (req, res) => {
 });
 
 // Obter assinatura por ID
-router.get('/:id', optionalAuth, (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const subscription = db.prepare(`
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da assinatura é obrigatório' });
+    }
+
+    const subscription = await db.prepare(`
       SELECT s.*, 
              st.name as store_name,
              p.name as plan_name,
@@ -66,7 +71,7 @@ router.get('/:id', optionalAuth, (req, res) => {
 });
 
 // Criar assinatura
-router.post('/', authenticateToken, requireRole('store', 'admin'), (req, res) => {
+router.post('/', authenticateToken, requireRole('store', 'admin'), async (req, res) => {
   try {
     const { store_id, plan_id } = req.body;
 
@@ -75,28 +80,28 @@ router.post('/', authenticateToken, requireRole('store', 'admin'), (req, res) =>
     }
 
     // Verificar se já existe assinatura ativa - se existir, atualizar em vez de criar nova
-    const existing = db.prepare('SELECT * FROM subscriptions WHERE store_id = ? AND status = ?').get(store_id, 'active');
+    const existing = await db.prepare('SELECT * FROM subscriptions WHERE store_id = ? AND status = ?').get(store_id, 'active');
     if (existing) {
       // Atualizar assinatura existente
-      db.prepare(`
+      await db.prepare(`
         UPDATE subscriptions 
         SET plan_id = ?
         WHERE id = ?
       `).run(plan_id, existing.id);
       
-      const updated = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(existing.id);
+      const updated = await db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(existing.id);
       return res.json(updated);
     }
 
     const id = uuidv4();
-    const plan = db.prepare('SELECT * FROM plans WHERE id = ?').get(plan_id);
+    const plan = await db.prepare('SELECT * FROM plans WHERE id = ?').get(plan_id);
     
     if (!plan) {
       return res.status(404).json({ error: 'Plano não encontrado' });
     }
 
     // Buscar user_id da loja (não usar req.user.id que pode ser do admin)
-    const store = db.prepare('SELECT user_id FROM stores WHERE id = ?').get(store_id);
+    const store = await db.prepare('SELECT user_id FROM stores WHERE id = ?').get(store_id);
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
     }
@@ -107,7 +112,7 @@ router.post('/', authenticateToken, requireRole('store', 'admin'), (req, res) =>
     const endDate = new Date();
     endDate.setDate(endDate.getDate() + 30);
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO subscriptions (id, user_id, store_id, plan_id, status, start_date, end_date)
       VALUES (?, ?, ?, ?, 'active', CURRENT_TIMESTAMP, ?)
     `).run(
@@ -118,7 +123,7 @@ router.post('/', authenticateToken, requireRole('store', 'admin'), (req, res) =>
       endDate.toISOString()
     );
 
-    const subscription = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(id);
+    const subscription = await db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(id);
     res.status(201).json(subscription);
   } catch (error) {
     console.error('Erro ao criar assinatura:', error);
@@ -127,9 +132,14 @@ router.post('/', authenticateToken, requireRole('store', 'admin'), (req, res) =>
 });
 
 // Atualizar assinatura
-router.put('/:id', authenticateToken, requireRole('admin'), (req, res) => {
+router.put('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
-    const subscription = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da assinatura é obrigatório' });
+    }
+
+    const subscription = await db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
     
     if (!subscription) {
       return res.status(404).json({ error: 'Assinatura não encontrada' });
@@ -146,13 +156,13 @@ router.put('/:id', authenticateToken, requireRole('admin'), (req, res) => {
 
     values.push(req.params.id);
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE subscriptions 
       SET ${updates.join(', ')}
       WHERE id = ?
     `).run(...values);
 
-    const updated = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
+    const updated = await db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
     res.json(updated);
   } catch (error) {
     console.error('Erro ao atualizar assinatura:', error);
@@ -161,15 +171,20 @@ router.put('/:id', authenticateToken, requireRole('admin'), (req, res) => {
 });
 
 // Deletar assinatura
-router.delete('/:id', authenticateToken, requireRole('admin'), (req, res) => {
+router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
-    const subscription = db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID da assinatura é obrigatório' });
+    }
+
+    const subscription = await db.prepare('SELECT * FROM subscriptions WHERE id = ?').get(req.params.id);
     
     if (!subscription) {
       return res.status(404).json({ error: 'Assinatura não encontrada' });
     }
 
-    db.prepare('DELETE FROM subscriptions WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM subscriptions WHERE id = ?').run(req.params.id);
     res.json({ message: 'Assinatura deletada com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar assinatura:', error);
@@ -178,4 +193,3 @@ router.delete('/:id', authenticateToken, requireRole('admin'), (req, res) => {
 });
 
 export default router;
-

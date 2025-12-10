@@ -71,6 +71,7 @@ export default function StoreSettings({ store, user, subscription, plan, onUpdat
     autoReply: true,
     showWhatsapp: true,
     checkout_enabled: false,
+    installments_enabled: false,
     // Campos de pagamento
     pix_key: "",
     payment_link: "",
@@ -116,6 +117,7 @@ export default function StoreSettings({ store, user, subscription, plan, onUpdat
         autoReply: store.autoReply !== false,
         showWhatsapp: store.showWhatsapp !== false,
         checkout_enabled: store.checkout_enabled === true || store.checkout_enabled === 1,
+        installments_enabled: store.installments_enabled === true || store.installments_enabled === 1,
         // Campos de pagamento
         pix_key: store.pix_key || "",
         payment_link: store.payment_link || "",
@@ -327,7 +329,7 @@ export default function StoreSettings({ store, user, subscription, plan, onUpdat
 
   const handleSubmit = async (e) => {
     if (e) {
-    e.preventDefault();
+      e.preventDefault();
       e.stopPropagation();
     }
     
@@ -357,12 +359,24 @@ export default function StoreSettings({ store, user, subscription, plan, onUpdat
       console.log("formData.city_id original:", formData.city_id);
       console.log("Tipo de city_id:", typeof formData.city_id);
       
-      const cityIdValue = formData.city_id && 
-                          formData.city_id !== "" && 
-                          formData.city_id !== "none" && 
-                          formData.city_id !== null 
-                        ? formData.city_id 
-                        : null;
+      // Processar city_id: converter string vazia, "none" ou valores inválidos para null
+      // Mas manter o valor se for um UUID válido
+      let cityIdValue = null;
+      if (formData.city_id && 
+          formData.city_id !== "" && 
+          formData.city_id !== "none" && 
+          formData.city_id !== null &&
+          formData.city_id !== undefined) {
+        // Verificar se é um UUID válido (formato básico)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const cityIdStr = String(formData.city_id).trim();
+        if (uuidRegex.test(cityIdStr)) {
+          cityIdValue = cityIdStr;
+        } else {
+          console.warn("city_id não é um UUID válido:", formData.city_id);
+          cityIdValue = null;
+        }
+      }
       
       console.log("city_id processado:", cityIdValue);
       
@@ -378,28 +392,50 @@ export default function StoreSettings({ store, user, subscription, plan, onUpdat
         shipping_fixed_price: formData.shipping_fixed_price ? parseFloat(formData.shipping_fixed_price) : null,
         shipping_calculate_on_whatsapp: formData.shipping_calculate_on_whatsapp || false,
         shipping_free_threshold: formData.shipping_free_threshold ? parseFloat(formData.shipping_free_threshold) : null,
-        city_id: cityIdValue,
+        city_id: cityIdValue, // Pode ser null ou UUID válido
         logo: formData.logo || null,
         checkout_enabled: formData.checkout_enabled || false,
+        installments_enabled: formData.installments_enabled || false,
         // banner não existe na tabela stores, apenas em store_customizations
         // Remover campos que não existem na tabela stores
         // email, autoReply, showWhatsapp, banner não são campos da tabela stores
       };
       
-      // Remover campos undefined para não enviar
+      // Remover campos que não devem ser enviados ao backend
+      // Remover campos undefined para não enviar (mas manter null para city_id se necessário)
       Object.keys(updateData).forEach(key => {
         if (updateData[key] === undefined) {
           delete updateData[key];
         }
+        // Remover campos que não existem na tabela stores
+        if (['storeId', 'email', 'autoReply', 'showWhatsapp', 'banner'].includes(key)) {
+          delete updateData[key];
+        }
       });
       
+      // Garantir que city_id seja sempre enviado (mesmo que seja null) se foi alterado
+      if ('city_id' in formData) {
+        updateData.city_id = cityIdValue; // Pode ser null ou UUID válido
+      }
+      
+      // Verificar se há pelo menos um campo para atualizar (além de updated_at)
+      const fieldsToUpdate = Object.keys(updateData).filter(key => key !== 'storeId');
+      if (fieldsToUpdate.length === 0) {
+        setError("Nenhuma alteração foi feita.");
+        setSaving(false);
+        return;
+      }
+      
       console.log("Dados preparados para atualização:", updateData);
+      console.log("Campos a atualizar:", fieldsToUpdate);
       console.log("city_id específico:", updateData.city_id);
+      console.log("Tipo de city_id:", typeof updateData.city_id);
       
       console.log("Enviando dados para atualização:", updateData);
       console.log("Store ID:", store.id);
       
       const updatedStore = await Store.update(store.id, updateData);
+      console.log("Resposta do servidor:", updatedStore);
       console.log("Loja atualizada com sucesso:", updatedStore);
       
       if (!updatedStore) {
@@ -993,6 +1029,24 @@ export default function StoreSettings({ store, user, subscription, plan, onUpdat
               <Switch
                 checked={formData.checkout_enabled}
                 onCheckedChange={(checked) => handleSwitchChange("checkout_enabled", checked)}
+              />
+            </div>
+            
+            <Separator />
+            
+            {/* Parcelamento */}
+            <div className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <Label htmlFor="installments_enabled" className="text-base font-semibold">
+                  Exibir Parcelamento
+                </Label>
+                <p className="text-sm text-gray-500">
+                  Mostra opções de parcelamento para os clientes nos produtos
+                </p>
+              </div>
+              <Switch
+                checked={formData.installments_enabled}
+                onCheckedChange={(checked) => handleSwitchChange("installments_enabled", checked)}
               />
             </div>
             

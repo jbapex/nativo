@@ -7,9 +7,9 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 
 // Listar endereços do usuário autenticado
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    const addresses = db.prepare(`
+    const addresses = await db.prepare(`
       SELECT * FROM user_addresses 
       WHERE user_id = ? 
       ORDER BY is_default DESC, created_at DESC
@@ -23,9 +23,17 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Obter endereço específico
-router.get('/:id', authenticateToken, (req, res) => {
+router.get('/:id', authenticateToken, async (req, res) => {
   try {
-    const address = db.prepare(`
+    // Validar ID e user
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID do endereço é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const address = await db.prepare(`
       SELECT * FROM user_addresses 
       WHERE id = ? AND user_id = ?
     `).get(req.params.id, req.user.id);
@@ -42,7 +50,7 @@ router.get('/:id', authenticateToken, (req, res) => {
 });
 
 // Criar novo endereço
-router.post('/', authenticateToken, sanitizeBody, (req, res) => {
+router.post('/', authenticateToken, sanitizeBody, async (req, res) => {
   try {
     const {
       type = 'delivery',
@@ -69,27 +77,27 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
 
     // Se for o endereço padrão, remover padrão dos outros endereços
     if (is_default) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE user_addresses 
-        SET is_default = 0 
+        SET is_default = false 
         WHERE user_id = ?
       `).run(req.user.id);
     }
 
     const id = uuidv4();
     
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO user_addresses (
         id, user_id, type, label, is_default, recipient_name, phone,
         zip_code, street, number, complement, neighborhood, city, state, reference
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, req.user.id, type, label || null, is_default ? 1 : 0,
+      id, req.user.id, type, label || null, is_default ? true : false,
       recipient_name, phone || null, zip_code, street, number,
       complement || null, neighborhood, city, state, reference || null
     );
 
-    const newAddress = db.prepare('SELECT * FROM user_addresses WHERE id = ?').get(id);
+    const newAddress = await db.prepare('SELECT * FROM user_addresses WHERE id = ?').get(id);
     res.status(201).json(newAddress);
   } catch (error) {
     console.error('Erro ao criar endereço:', error);
@@ -98,10 +106,18 @@ router.post('/', authenticateToken, sanitizeBody, (req, res) => {
 });
 
 // Atualizar endereço
-router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
+router.put('/:id', authenticateToken, sanitizeBody, async (req, res) => {
   try {
+    // Validar ID e user
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID do endereço é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     // Verificar se o endereço pertence ao usuário
-    const existingAddress = db.prepare(`
+    const existingAddress = await db.prepare(`
       SELECT * FROM user_addresses 
       WHERE id = ? AND user_id = ?
     `).get(req.params.id, req.user.id);
@@ -128,9 +144,9 @@ router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
 
     // Se for marcar como padrão, remover padrão dos outros
     if (is_default && !existingAddress.is_default) {
-      db.prepare(`
+      await db.prepare(`
         UPDATE user_addresses 
-        SET is_default = 0 
+        SET is_default = false 
         WHERE user_id = ? AND id != ?
       `).run(req.user.id, req.params.id);
     }
@@ -140,7 +156,7 @@ router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
 
     if (type !== undefined) { updates.push('type = ?'); values.push(type); }
     if (label !== undefined) { updates.push('label = ?'); values.push(label || null); }
-    if (is_default !== undefined) { updates.push('is_default = ?'); values.push(is_default ? 1 : 0); }
+    if (is_default !== undefined) { updates.push('is_default = ?'); values.push(is_default ? true : false); }
     if (recipient_name !== undefined) { updates.push('recipient_name = ?'); values.push(recipient_name); }
     if (phone !== undefined) { updates.push('phone = ?'); values.push(phone || null); }
     if (zip_code !== undefined) { updates.push('zip_code = ?'); values.push(zip_code); }
@@ -155,13 +171,13 @@ router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(req.params.id);
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE user_addresses 
       SET ${updates.join(', ')}
       WHERE id = ?
     `).run(...values);
 
-    const updatedAddress = db.prepare('SELECT * FROM user_addresses WHERE id = ?').get(req.params.id);
+    const updatedAddress = await db.prepare('SELECT * FROM user_addresses WHERE id = ?').get(req.params.id);
     res.json(updatedAddress);
   } catch (error) {
     console.error('Erro ao atualizar endereço:', error);
@@ -170,10 +186,18 @@ router.put('/:id', authenticateToken, sanitizeBody, (req, res) => {
 });
 
 // Deletar endereço
-router.delete('/:id', authenticateToken, (req, res) => {
+router.delete('/:id', authenticateToken, async (req, res) => {
   try {
+    // Validar ID e user
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID do endereço é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     // Verificar se o endereço pertence ao usuário
-    const address = db.prepare(`
+    const address = await db.prepare(`
       SELECT * FROM user_addresses 
       WHERE id = ? AND user_id = ?
     `).get(req.params.id, req.user.id);
@@ -182,7 +206,7 @@ router.delete('/:id', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Endereço não encontrado' });
     }
 
-    db.prepare('DELETE FROM user_addresses WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM user_addresses WHERE id = ?').run(req.params.id);
     res.json({ message: 'Endereço deletado com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar endereço:', error);
@@ -191,10 +215,18 @@ router.delete('/:id', authenticateToken, (req, res) => {
 });
 
 // Definir endereço como padrão
-router.patch('/:id/set-default', authenticateToken, (req, res) => {
+router.patch('/:id/set-default', authenticateToken, async (req, res) => {
   try {
+    // Validar ID e user
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID do endereço é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     // Verificar se o endereço pertence ao usuário
-    const address = db.prepare(`
+    const address = await db.prepare(`
       SELECT * FROM user_addresses 
       WHERE id = ? AND user_id = ?
     `).get(req.params.id, req.user.id);
@@ -204,20 +236,20 @@ router.patch('/:id/set-default', authenticateToken, (req, res) => {
     }
 
     // Remover padrão dos outros endereços
-    db.prepare(`
+    await db.prepare(`
       UPDATE user_addresses 
-      SET is_default = 0 
+      SET is_default = false 
       WHERE user_id = ?
     `).run(req.user.id);
 
     // Definir este como padrão
-    db.prepare(`
+    await db.prepare(`
       UPDATE user_addresses 
-      SET is_default = 1, updated_at = CURRENT_TIMESTAMP
+      SET is_default = true, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(req.params.id);
 
-    const updatedAddress = db.prepare('SELECT * FROM user_addresses WHERE id = ?').get(req.params.id);
+    const updatedAddress = await db.prepare('SELECT * FROM user_addresses WHERE id = ?').get(req.params.id);
     res.json(updatedAddress);
   } catch (error) {
     console.error('Erro ao definir endereço padrão:', error);
@@ -226,4 +258,3 @@ router.patch('/:id/set-default', authenticateToken, (req, res) => {
 });
 
 export default router;
-

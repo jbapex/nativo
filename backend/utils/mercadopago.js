@@ -6,11 +6,11 @@ import { db } from '../database/db.js';
  * @param {string} storeId - ID da loja
  * @returns {MercadoPagoConfig|null} - Cliente configurado ou null se não tiver credenciais
  */
-export function getMercadoPagoClient(storeId) {
+export async function getMercadoPagoClient(storeId) {
   console.log('=== DEBUG getMercadoPagoClient ===');
   console.log('Store ID:', storeId);
   
-  const store = db.prepare('SELECT mercadopago_access_token FROM stores WHERE id = ?').get(storeId);
+  const store = await db.prepare('SELECT mercadopago_access_token FROM stores WHERE id = ?').get(storeId);
   
   console.log('Store encontrada:', !!store);
   console.log('Tem access_token:', !!store?.mercadopago_access_token);
@@ -38,8 +38,8 @@ export function getMercadoPagoClient(storeId) {
  * @param {string} storeId - ID da loja
  * @returns {boolean}
  */
-export function storeAcceptsMercadoPago(storeId) {
-  const store = db.prepare('SELECT payment_methods, mercadopago_access_token FROM stores WHERE id = ?').get(storeId);
+export async function storeAcceptsMercadoPago(storeId) {
+  const store = await db.prepare('SELECT payment_methods, mercadopago_access_token FROM stores WHERE id = ?').get(storeId);
   
   if (!store) {
     return false;
@@ -68,7 +68,7 @@ export function storeAcceptsMercadoPago(storeId) {
  * @returns {Promise<Object>} - Preferência criada
  */
 export async function createPreference(storeId, preferenceData) {
-  const client = getMercadoPagoClient(storeId);
+  const client = await getMercadoPagoClient(storeId);
   
   if (!client) {
     throw new Error('Loja não possui credenciais do Mercado Pago configuradas');
@@ -87,7 +87,7 @@ export async function createPreference(storeId, preferenceData) {
  * @returns {Promise<Object>} - Informações do pagamento
  */
 export async function getPayment(storeId, paymentId) {
-  const client = getMercadoPagoClient(storeId);
+  const client = await getMercadoPagoClient(storeId);
   
   if (!client) {
     throw new Error('Loja não possui credenciais do Mercado Pago configuradas');
@@ -106,7 +106,7 @@ export async function getPayment(storeId, paymentId) {
  * @returns {Promise<Object>} - Pagamento cancelado
  */
 export async function cancelPayment(storeId, paymentId) {
-  const client = getMercadoPagoClient(storeId);
+  const client = await getMercadoPagoClient(storeId);
   
   if (!client) {
     throw new Error('Loja não possui credenciais do Mercado Pago configuradas');

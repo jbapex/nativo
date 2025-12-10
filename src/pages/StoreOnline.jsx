@@ -274,7 +274,8 @@ export default function StoreOnline() {
     secondary: customizations.secondary_color || '#06b6d4',
     background: customizations.background_color || '#ffffff',
     text: customizations.text_color || '#1f2937',
-    header: customizations.header_color || '#ffffff',
+    header: customizations.header_color || '#1e3a8a',
+    categories_bar: customizations.categories_bar_color || '#f97316',
     footer: customizations.footer_color || '#f9fafb',
   };
 
@@ -295,7 +296,7 @@ export default function StoreOnline() {
         onSearch={handleSearch}
       />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="w-full px-12 sm:px-16 lg:px-20 py-8">
         {/* Botão de Filtros Mobile */}
         <div className="lg:hidden mb-4">
           <Button
@@ -419,9 +420,12 @@ function ProductCard({ product, theme }) {
     }).format(value);
   };
 
+  // Obter storeId da URL ou do contexto
+  const { id: storeId } = useParams();
+  
   return (
     <Link 
-      to={`/produto/${product.id}`}
+      to={storeId ? `/loja-online/${storeId}/produto/${product.id}` : `/produto/${product.id}`}
       className="block group"
     >
       <Card className="h-full overflow-hidden border-2 hover:border-opacity-100 transition-all duration-300 hover:shadow-xl bg-white">

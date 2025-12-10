@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 
 
-export default function SearchBar({ value, onChange, onCategoryChange, selectedCategory, categories = [], onSearch }) {
+export default function SearchBar({ value, onChange, onCategoryChange, selectedCategory, categories = [], onSearch, appearanceSettings = {} }) {
   const [priceRange, setPriceRange] = React.useState([0, 1000]);
   const [orderBy, setOrderBy] = React.useState("relevance");
   const [showVerifiedOnly, setShowVerifiedOnly] = React.useState(false);
@@ -72,17 +72,15 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
       <form onSubmit={handleSearchSubmit}>
         {/* Card de Busca Personalizado */}
         <div 
-          className={`
-            bg-white rounded-2xl shadow-lg border-2 transition-all duration-300
-            ${isFocused 
-              ? 'border-blue-500 shadow-2xl shadow-blue-500/30 ring-4 ring-blue-500/20' 
-              : 'border-blue-100 shadow-md hover:shadow-lg hover:border-blue-200'
-            }
-          `}
+          className="rounded-2xl shadow-lg border-2 transition-all duration-300"
           style={{
+            backgroundColor: appearanceSettings?.cardBackgroundColor || '#ffffff',
+            borderColor: isFocused 
+              ? (appearanceSettings?.inputFocusColor || '#2563eb')
+              : (appearanceSettings?.cardBorderColor || '#e3f2fd'),
             boxShadow: isFocused 
-              ? '0 20px 25px -5px rgba(59, 130, 246, 0.3), 0 10px 10px -5px rgba(59, 130, 246, 0.1), 0 0 0 4px rgba(59, 130, 246, 0.1)' 
-              : undefined
+              ? `0 20px 25px -5px ${appearanceSettings?.cardShadowColor || 'rgba(0, 0, 0, 0.1)'}, 0 10px 10px -5px ${appearanceSettings?.cardShadowColor || 'rgba(0, 0, 0, 0.05)'}, 0 0 0 4px ${appearanceSettings?.focusRingColor || '#2563eb'}20`
+              : `0 4px 6px -1px ${appearanceSettings?.cardShadowColor || 'rgba(0, 0, 0, 0.1)'}`
           }}
         >
           <div className="p-6">
@@ -91,9 +89,12 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
               <div className="relative flex-1 w-full">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 z-10">
                   <Search 
-                    className={`w-6 h-6 transition-colors duration-300 ${
-                      isFocused ? 'text-blue-600' : 'text-blue-400'
-                    }`} 
+                    className="w-6 h-6 transition-colors duration-300"
+                    style={{
+                      color: isFocused 
+                        ? (appearanceSettings?.inputFocusColor || '#2563eb')
+                        : (appearanceSettings?.textSecondaryColor || '#9ca3af')
+                    }}
                   />
                 </div>
                 <input
@@ -108,15 +109,17 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
                       handleSearchSubmit(e);
                     }
                   }}
-                  className={`
-                    w-full h-14 pl-14 pr-14 rounded-xl border-2 transition-all duration-300
-                    text-gray-900 placeholder:text-gray-400 text-lg
-                    focus:outline-none focus:ring-0
-                    ${isFocused 
-                      ? 'border-blue-500 bg-blue-50/50' 
-                      : 'border-transparent bg-gray-50 hover:bg-gray-100'
-                    }
-                  `}
+                  className="w-full h-14 pl-14 pr-14 rounded-xl border-2 transition-all duration-300 text-lg focus:outline-none focus:ring-0"
+                  style={{
+                    backgroundColor: isFocused 
+                      ? `${appearanceSettings?.inputBackgroundColor || '#ffffff'}80`
+                      : (appearanceSettings?.inputBackgroundColor || '#f9fafb'),
+                    borderColor: isFocused 
+                      ? (appearanceSettings?.inputFocusColor || '#2563eb')
+                      : 'transparent',
+                    color: appearanceSettings?.textColor || '#1f2937',
+                    outlineColor: isFocused ? (appearanceSettings?.focusRingColor || '#2563eb') : 'transparent'
+                  }}
                 />
                 {value && (
                   <button
@@ -132,13 +135,24 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
               {/* Botão de Buscar */}
               <Button
                 type="submit"
-                className={`
-                  h-14 px-8 text-lg font-semibold rounded-xl transition-all duration-300
-                  bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800
-                  text-white shadow-lg hover:shadow-xl
-                  ${isFocused ? 'shadow-blue-500/50' : ''}
-                  w-full lg:w-auto
-                `}
+                className="h-14 px-8 text-lg font-semibold rounded-xl transition-all duration-300 text-white shadow-lg hover:shadow-xl w-full lg:w-auto"
+                style={{
+                  background: `linear-gradient(to right, ${appearanceSettings?.buttonPrimaryColor || '#2563eb'}, ${appearanceSettings?.secondaryColor || '#1d4ed8'})`,
+                  color: appearanceSettings?.buttonTextColor || '#ffffff',
+                  boxShadow: isFocused 
+                    ? `0 10px 15px -3px ${appearanceSettings?.buttonPrimaryColor || '#2563eb'}50`
+                    : `0 4px 6px -1px ${appearanceSettings?.cardShadowColor || 'rgba(0, 0, 0, 0.1)'}`
+                }}
+                onMouseEnter={(e) => {
+                  const primary = appearanceSettings?.buttonPrimaryColor || '#2563eb';
+                  const secondary = appearanceSettings?.secondaryColor || '#1d4ed8';
+                  e.target.style.background = `linear-gradient(to right, ${secondary}, ${primary})`;
+                }}
+                onMouseLeave={(e) => {
+                  const primary = appearanceSettings?.buttonPrimaryColor || '#2563eb';
+                  const secondary = appearanceSettings?.secondaryColor || '#1d4ed8';
+                  e.target.style.background = `linear-gradient(to right, ${primary}, ${secondary})`;
+                }}
               >
                 <Search className="w-5 h-5 mr-2" />
                 Buscar
@@ -150,7 +164,12 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
 
       {/* Filtros (mantidos abaixo do card de busca) */}
       <motion.div 
-        className="bg-white rounded-xl shadow-md p-4 border border-gray-100 mt-4"
+        className="rounded-xl shadow-md p-4 border mt-4"
+        style={{
+          backgroundColor: appearanceSettings?.cardBackgroundColor || '#ffffff',
+          borderColor: appearanceSettings?.cardBorderColor || '#e5e7eb',
+          boxShadow: `0 1px 3px 0 ${appearanceSettings?.cardShadowColor || 'rgba(0, 0, 0, 0.1)'}`
+        }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3, delay: 0.1 }}
@@ -158,7 +177,13 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
         <div className="flex flex-col sm:flex-row gap-4">
 
         <Select value={selectedCategory} onValueChange={onCategoryChange}>
-          <SelectTrigger className="w-full sm:w-[200px] h-12 border-blue-100">
+          <SelectTrigger 
+            className="w-full sm:w-[200px] h-12"
+            style={{
+              borderColor: appearanceSettings?.inputBorderColor || '#d1d5db',
+              backgroundColor: appearanceSettings?.inputBackgroundColor || '#ffffff'
+            }}
+          >
             <SelectValue placeholder="Categoria" />
           </SelectTrigger>
           <SelectContent>
@@ -172,9 +197,24 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
         
         <Button 
           variant="outline" 
-          className="h-12 border-blue-100 gap-2 sm:w-auto w-full hover:bg-blue-50 hover:text-blue-700 transition-colors"
+          className="h-12 gap-2 sm:w-auto w-full transition-colors"
+          style={{
+            borderColor: appearanceSettings?.inputBorderColor || '#d1d5db',
+            color: appearanceSettings?.textColor || '#1f2937'
+          }}
+          onMouseEnter={(e) => {
+            e.target.style.backgroundColor = appearanceSettings?.hoverColor || 'rgba(37, 99, 235, 0.1)';
+            e.target.style.color = appearanceSettings?.linkHoverColor || '#1d4ed8';
+          }}
+          onMouseLeave={(e) => {
+            e.target.style.backgroundColor = 'transparent';
+            e.target.style.color = appearanceSettings?.textColor || '#1f2937';
+          }}
         >
-          <MapPin className="w-4 h-4 text-blue-600" />
+          <MapPin 
+            className="w-4 h-4" 
+            style={{ color: appearanceSettings?.linkColor || '#2563eb' }}
+          />
           <span className="hidden sm:inline">Perto de mim</span>
           <span className="sm:hidden">Localização</span>
         </Button>
@@ -183,23 +223,44 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
           <SheetTrigger asChild>
             <Button 
               variant="outline" 
-              className="w-full sm:w-auto h-12 border-blue-100 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+              className="w-full sm:w-auto h-12 transition-colors"
+              style={{
+                borderColor: appearanceSettings?.inputBorderColor || '#d1d5db',
+                color: appearanceSettings?.textColor || '#1f2937'
+              }}
+              onMouseEnter={(e) => {
+                e.target.style.backgroundColor = appearanceSettings?.hoverColor || 'rgba(37, 99, 235, 0.1)';
+                e.target.style.color = appearanceSettings?.linkHoverColor || '#1d4ed8';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.backgroundColor = 'transparent';
+                e.target.style.color = appearanceSettings?.textColor || '#1f2937';
+              }}
             >
-              <SlidersHorizontal className="w-4 h-4 mr-2 text-blue-600" />
+              <SlidersHorizontal 
+                className="w-4 h-4 mr-2" 
+                style={{ color: appearanceSettings?.linkColor || '#2563eb' }}
+              />
               Filtros
             </Button>
           </SheetTrigger>
           <SheetContent className="overflow-y-auto">
             <SheetHeader>
               <SheetTitle className="text-xl flex items-center">
-                <SlidersHorizontal className="w-5 h-5 mr-2 text-blue-600" />
+                <SlidersHorizontal 
+                  className="w-5 h-5 mr-2" 
+                  style={{ color: appearanceSettings?.linkColor || '#2563eb' }}
+                />
                 Filtros Avançados
               </SheetTitle>
             </SheetHeader>
             <div className="py-6 space-y-8">
               <div>
                 <h3 className="text-sm font-medium mb-4 flex items-center">
-                  <Tag className="w-4 h-4 mr-2 text-blue-600" />
+                  <Tag 
+                    className="w-4 h-4 mr-2" 
+                    style={{ color: appearanceSettings?.linkColor || '#2563eb' }}
+                  />
                   Faixa de Preço
                 </h3>
                 <Slider
@@ -211,10 +272,24 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
                   className="mt-6"
                 />
                 <div className="flex justify-between mt-2 text-sm">
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Badge 
+                    variant="outline"
+                    style={{
+                      backgroundColor: appearanceSettings?.hoverColor || 'rgba(37, 99, 235, 0.1)',
+                      color: appearanceSettings?.linkColor || '#2563eb',
+                      borderColor: appearanceSettings?.cardBorderColor || '#e5e7eb'
+                    }}
+                  >
                     R$ {priceRange[0]}
                   </Badge>
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  <Badge 
+                    variant="outline"
+                    style={{
+                      backgroundColor: appearanceSettings?.hoverColor || 'rgba(37, 99, 235, 0.1)',
+                      color: appearanceSettings?.linkColor || '#2563eb',
+                      borderColor: appearanceSettings?.cardBorderColor || '#e5e7eb'
+                    }}
+                  >
                     R$ {priceRange[1]}
                   </Badge>
                 </div>
@@ -222,7 +297,10 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
 
               <div>
                 <h3 className="text-sm font-medium mb-3 flex items-center">
-                  <ArrowDownUp className="w-4 h-4 mr-2 text-blue-600" />
+                  <ArrowDownUp 
+                    className="w-4 h-4 mr-2" 
+                    style={{ color: appearanceSettings?.linkColor || '#2563eb' }}
+                  />
                   Ordenar por
                 </h3>
                 <Select value={orderBy} onValueChange={setOrderBy}>
@@ -241,7 +319,10 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
 
               <div className="space-y-4">
                 <h3 className="text-sm font-medium flex items-center">
-                  <MapPin className="w-4 h-4 mr-2 text-blue-600" />
+                  <MapPin 
+                    className="w-4 h-4 mr-2" 
+                    style={{ color: appearanceSettings?.linkColor || '#2563eb' }}
+                  />
                   Localização
                 </h3>
                 <div className="grid grid-cols-2 gap-2">
@@ -250,8 +331,25 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
                       key={location}
                       variant={locationFilter === location.toLowerCase() ? "default" : "outline"}
                       size="sm"
-                      className={locationFilter === location.toLowerCase() ? "bg-blue-600" : "border-blue-100"}
+                      style={locationFilter === location.toLowerCase() ? {
+                        backgroundColor: appearanceSettings?.buttonPrimaryColor || '#2563eb',
+                        color: appearanceSettings?.buttonTextColor || '#ffffff',
+                        borderColor: appearanceSettings?.buttonPrimaryColor || '#2563eb'
+                      } : {
+                        borderColor: appearanceSettings?.inputBorderColor || '#d1d5db',
+                        color: appearanceSettings?.textColor || '#1f2937'
+                      }}
                       onClick={() => setLocationFilter(location.toLowerCase())}
+                      onMouseEnter={(e) => {
+                        if (locationFilter !== location.toLowerCase()) {
+                          e.target.style.backgroundColor = appearanceSettings?.hoverColor || 'rgba(37, 99, 235, 0.1)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (locationFilter !== location.toLowerCase()) {
+                          e.target.style.backgroundColor = 'transparent';
+                        }
+                      }}
                     >
                       {location}
                     </Button>
@@ -261,7 +359,15 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
 
               <div className="flex items-center justify-between">
                 <Label htmlFor="verified-only" className="text-sm font-medium flex items-center cursor-pointer">
-                  <Badge className="mr-2 bg-blue-100 text-blue-800 font-normal">Verificado</Badge>
+                  <Badge 
+                    className="mr-2 font-normal"
+                    style={{
+                      backgroundColor: appearanceSettings?.hoverColor || 'rgba(37, 99, 235, 0.1)',
+                      color: appearanceSettings?.linkColor || '#2563eb'
+                    }}
+                  >
+                    Verificado
+                  </Badge>
                   Apenas Lojas Verificadas
                 </Label>
                 <Switch

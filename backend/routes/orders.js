@@ -11,7 +11,7 @@ import { createNotification } from './notifications.js';
 const router = express.Router();
 
 // Listar pedidos (cliente vê seus pedidos, loja vê pedidos da loja, admin vê todos)
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     // Paginação
     const { page, limit, offset } = getPaginationParams(req.query, { defaultLimit: 20, maxLimit: 100 });
@@ -34,7 +34,7 @@ router.get('/', authenticateToken, (req, res) => {
       countQuery = 'SELECT COUNT(*) as total FROM orders o';
     } else if (req.user.role === 'store') {
       // Lojista vê pedidos da sua loja (recebidos) E pedidos que ele fez (compras)
-      const store = db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
+      const store = await db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
       
       if (!store) {
         // Se não tem loja, mostrar apenas os pedidos que ele fez como cliente
@@ -82,7 +82,7 @@ router.get('/', authenticateToken, (req, res) => {
     }
     
     // Contar total
-    const countResult = db.prepare(countQuery).get(...queryParams);
+    const countResult = await db.prepare(countQuery).get(...queryParams);
     const total = countResult?.total || 0;
     
     // Aplicar ordenação e paginação
@@ -90,12 +90,12 @@ router.get('/', authenticateToken, (req, res) => {
     const paginatedQuery = applyPagination(baseQuery, limit, offset);
     queryParams.push(limit, offset);
     
-    const orders = db.prepare(paginatedQuery).all(...queryParams);
+    const orders = await db.prepare(paginatedQuery).all(...queryParams);
     
     // Buscar itens de cada pedido
-    const ordersWithItems = orders.map(order => {
+    const ordersWithItems = await Promise.all(orders.map(async order => {
       try {
-        const items = db.prepare(`
+        const items = await db.prepare(`
           SELECT oi.*, p.images, p.active
           FROM order_items oi
           LEFT JOIN products p ON oi.product_id = p.id
@@ -132,7 +132,7 @@ router.get('/', authenticateToken, (req, res) => {
           items: []
         };
       }
-    });
+    }));
     
     // Retornar com paginação
     const response = createPaginationResponse(ordersWithItems, total, page, limit);
@@ -144,9 +144,17 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Obter um pedido específico
-router.get('/:id', authenticateToken, requireOrderAccess, (req, res) => {
+router.get('/:id', authenticateToken, requireOrderAccess, async (req, res) => {
   try {
-    const order = db.prepare(`
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID do pedido é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const order = await db.prepare(`
       SELECT o.*, 
              u.full_name as user_name,
              u.email as user_email,
@@ -167,7 +175,7 @@ router.get('/:id', authenticateToken, requireOrderAccess, (req, res) => {
     if (req.user.role !== 'admin') {
       if (req.user.role === 'store') {
         // Lojista pode ver pedidos da sua loja (recebidos) OU pedidos que ele fez (compras)
-        const store = db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
+        const store = await db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
         const isStoreOwner = store && order.store_id === store.id;
         const isOrderBuyer = order.user_id === req.user.id;
         
@@ -180,7 +188,7 @@ router.get('/:id', authenticateToken, requireOrderAccess, (req, res) => {
     }
     
     // Buscar itens do pedido
-    const items = db.prepare(`
+    const items = await db.prepare(`
       SELECT oi.*, p.images, p.active
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
@@ -188,7 +196,7 @@ router.get('/:id', authenticateToken, requireOrderAccess, (req, res) => {
     `).all(order.id);
     
     // Buscar histórico
-    const history = db.prepare(`
+    const history = await db.prepare(`
       SELECT * FROM order_history
       WHERE order_id = ?
       ORDER BY created_at DESC
@@ -225,7 +233,7 @@ router.get('/:id', authenticateToken, requireOrderAccess, (req, res) => {
 });
 
 // Criar novo pedido
-router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
+router.post('/', authenticateToken, validate(orderSchema), async (req, res) => {
   try {
     const {
       store_id,
@@ -244,7 +252,7 @@ router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
     }
     
     // Verificar se a loja existe
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
+    const store = await db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
     }
@@ -254,7 +262,7 @@ router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
     const orderItems = [];
     
     for (const item of items) {
-      const product = db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
+      const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
       if (!product) {
         return res.status(404).json({ error: `Produto ${item.product_id} não encontrado` });
       }
@@ -286,7 +294,7 @@ router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
     
     // Criar pedido
     const orderId = uuidv4();
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO orders (
         id, user_id, store_id, status, total_amount,
         shipping_address, shipping_city, shipping_state, shipping_zip, shipping_phone,
@@ -313,7 +321,7 @@ router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
     `);
     
     for (const item of orderItems) {
-      insertItem.run(
+      await insertItem.run(
         uuidv4(),
         orderId,
         item.product_id,
@@ -324,14 +332,14 @@ router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
       );
       
       // Atualizar estoque se disponível
-      const productForStock = db.prepare('SELECT stock FROM products WHERE id = ?').get(item.product_id);
+      const productForStock = await db.prepare('SELECT stock FROM products WHERE id = ?').get(item.product_id);
       if (productForStock && productForStock.stock !== null) {
-        db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(item.quantity, item.product_id);
+        await db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(item.quantity, item.product_id);
       }
     }
     
     // Buscar pedido criado com relacionamentos
-    const createdOrder = db.prepare(`
+    const createdOrder = await db.prepare(`
       SELECT o.*, 
              u.full_name as user_name,
              u.email as user_email,
@@ -343,7 +351,7 @@ router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
       WHERE o.id = ?
     `).get(orderId);
     
-    const orderItemsData = db.prepare(`
+    const orderItemsData = await db.prepare(`
       SELECT oi.*, p.images
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
@@ -360,10 +368,10 @@ router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
     
     // Criar notificação para o lojista
     try {
-      const store = db.prepare('SELECT user_id FROM stores WHERE id = ?').get(store_id);
-      if (store) {
-        createNotification(
-          store.user_id,
+      const storeForNotification = await db.prepare('SELECT user_id FROM stores WHERE id = ?').get(store_id);
+      if (storeForNotification) {
+        await createNotification(
+          storeForNotification.user_id,
           'order_new',
           'Novo Pedido Recebido',
           `Você recebeu um novo pedido #${orderId.slice(0, 8).toUpperCase()} no valor de R$ ${totalAmount.toFixed(2)}`,
@@ -382,7 +390,7 @@ router.post('/', authenticateToken, validate(orderSchema), (req, res) => {
 });
 
 // Atualizar status do pedido (lojista ou admin)
-router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req, res) => {
+router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), async (req, res) => {
   try {
     const { status, tracking_number, notes } = req.body;
     
@@ -391,14 +399,14 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
       return res.status(400).json({ error: 'Status inválido' });
     }
     
-    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
     if (!order) {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
     
     // Verificar permissão (lojista só pode atualizar pedidos da sua loja)
     if (req.user.role === 'store') {
-      const store = db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
+      const store = await db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
       if (!store || order.store_id !== store.id) {
         return res.status(403).json({ error: 'Acesso negado' });
       }
@@ -425,7 +433,7 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
     
     updateValues.push(req.params.id);
     
-    db.prepare(`
+    await db.prepare(`
       UPDATE orders 
       SET ${updateFields.join(', ')}
       WHERE id = ?
@@ -433,7 +441,7 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
     
     // Salvar histórico
     try {
-      const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.user.id);
+      const user = await db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.user.id);
       const statusLabels = {
         'pending': 'Pendente',
         'confirmed': 'Confirmado',
@@ -443,7 +451,7 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
         'cancelled': 'Cancelado'
       };
       
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO order_history (id, order_id, changed_by, changed_by_name, change_type, old_value, new_value, notes)
         VALUES (?, ?, ?, ?, 'status', ?, ?, ?)
       `).run(
@@ -458,7 +466,7 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
       
       // Se tracking_number foi adicionado, salvar no histórico também
       if (status === 'shipped' && tracking_number && tracking_number !== oldTrackingNumber) {
-        db.prepare(`
+        await db.prepare(`
           INSERT INTO order_history (id, order_id, changed_by, changed_by_name, change_type, old_value, new_value, notes)
           VALUES (?, ?, ?, ?, 'tracking', ?, ?, ?)
         `).run(
@@ -477,8 +485,8 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
     
     // Criar notificação para o cliente sobre mudança de status
     try {
-      const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
-      if (order) {
+      const orderForNotification = await db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+      if (orderForNotification) {
         const statusMessages = {
           'confirmed': 'Seu pedido foi confirmado',
           'processing': 'Seu pedido está sendo processado',
@@ -488,8 +496,8 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
         };
         
         if (statusMessages[status]) {
-          createNotification(
-            order.user_id,
+          await createNotification(
+            orderForNotification.user_id,
             'order_status',
             'Status do Pedido Atualizado',
             `${statusMessages[status]}. Pedido #${req.params.id.slice(0, 8).toUpperCase()}`,
@@ -501,7 +509,7 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
       console.error('Erro ao criar notificação de mudança de status:', error);
     }
     
-    const updatedOrder = db.prepare(`
+    const updatedOrder = await db.prepare(`
       SELECT o.*, 
              u.full_name as user_name,
              u.email as user_email,
@@ -514,7 +522,7 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
       WHERE o.id = ?
     `).get(req.params.id);
     
-    const items = db.prepare(`
+    const items = await db.prepare(`
       SELECT oi.*, p.images, p.active
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
@@ -522,7 +530,7 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
     `).all(req.params.id);
     
     // Buscar histórico
-    const history = db.prepare(`
+    const history = await db.prepare(`
       SELECT * FROM order_history
       WHERE order_id = ?
       ORDER BY created_at DESC
@@ -559,23 +567,33 @@ router.put('/:id/status', authenticateToken, requireRole('store', 'admin'), (req
 });
 
 // Atualizar status de pagamento (admin ou lojista)
-router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin'), (req, res) => {
+router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin'), async (req, res) => {
   try {
     const { payment_status, notes } = req.body;
+    
+    // Validar ID do pedido
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID do pedido é obrigatório' });
+    }
+    
+    // Validar payment_status
+    if (!payment_status) {
+      return res.status(400).json({ error: 'Status de pagamento é obrigatório' });
+    }
     
     const validStatuses = ['pending', 'paid', 'failed', 'refunded'];
     if (!validStatuses.includes(payment_status)) {
       return res.status(400).json({ error: 'Status de pagamento inválido' });
     }
     
-    const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+    const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
     if (!order) {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
     
     // Verificar permissão
     if (req.user.role === 'store') {
-      const store = db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
+      const store = await db.prepare('SELECT id FROM stores WHERE user_id = ?').get(req.user.id);
       if (!store || order.store_id !== store.id) {
         return res.status(403).json({ error: 'Acesso negado' });
       }
@@ -584,7 +602,7 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
     const oldPaymentStatus = order.payment_status;
     
     // Preparar atualização
-    const updateFields = ['payment_status = ?', 'updated_at = CURRENT_TIMESTAMP'];
+    const updateFields = ['payment_status = ?'];
     const updateValues = [payment_status];
     
     // Adicionar notes_admin se fornecido (sanitizado)
@@ -594,17 +612,27 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
       updateValues.push(sanitizedNotes);
     }
     
+    // Adicionar updated_at (usar NOW() para PostgreSQL ou CURRENT_TIMESTAMP para SQLite)
+    updateFields.push('updated_at = CURRENT_TIMESTAMP');
+    
     updateValues.push(req.params.id);
     
-    db.prepare(`
-      UPDATE orders 
-      SET ${updateFields.join(', ')}
-      WHERE id = ?
-    `).run(...updateValues);
+    try {
+      await db.prepare(`
+        UPDATE orders 
+        SET ${updateFields.join(', ')}
+        WHERE id = ?
+      `).run(...updateValues);
+    } catch (updateError) {
+      console.error('Erro ao atualizar pedido:', updateError);
+      console.error('Query:', `UPDATE orders SET ${updateFields.join(', ')} WHERE id = ?`);
+      console.error('Valores:', updateValues);
+      throw updateError;
+    }
     
     // Salvar histórico
     try {
-      const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.user.id);
+      const user = await db.prepare('SELECT full_name FROM users WHERE id = ?').get(req.user.id);
       const paymentStatusLabels = {
         'pending': 'Pendente',
         'paid': 'Pago',
@@ -612,7 +640,7 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
         'refunded': 'Reembolsado'
       };
       
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO order_history (id, order_id, changed_by, changed_by_name, change_type, old_value, new_value, notes)
         VALUES (?, ?, ?, ?, 'payment_status', ?, ?, ?)
       `).run(
@@ -630,8 +658,8 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
     
     // Criar notificação para o cliente sobre mudança de status de pagamento
     try {
-      const order = db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
-      if (order) {
+      const orderForNotification = await db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
+      if (orderForNotification) {
         const paymentMessages = {
           'paid': 'Pagamento confirmado',
           'failed': 'Falha no pagamento',
@@ -639,8 +667,8 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
         };
         
         if (paymentMessages[payment_status]) {
-          createNotification(
-            order.user_id,
+          await createNotification(
+            orderForNotification.user_id,
             'order_payment',
             'Status de Pagamento Atualizado',
             `${paymentMessages[payment_status]}. Pedido #${req.params.id.slice(0, 8).toUpperCase()}`,
@@ -652,7 +680,7 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
       console.error('Erro ao criar notificação de pagamento:', error);
     }
     
-    const updatedOrder = db.prepare(`
+    const updatedOrder = await db.prepare(`
       SELECT o.*, 
              u.full_name as user_name,
              u.email as user_email,
@@ -665,7 +693,7 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
       WHERE o.id = ?
     `).get(req.params.id);
     
-    const items = db.prepare(`
+    const items = await db.prepare(`
       SELECT oi.*, p.images, p.active
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
@@ -673,7 +701,7 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
     `).all(req.params.id);
     
     // Buscar histórico
-    const history = db.prepare(`
+    const history = await db.prepare(`
       SELECT * FROM order_history
       WHERE order_id = ?
       ORDER BY created_at DESC
@@ -705,7 +733,14 @@ router.put('/:id/payment-status', authenticateToken, requireRole('store', 'admin
     });
   } catch (error) {
     console.error('Erro ao atualizar status de pagamento:', error);
-    res.status(500).json({ error: 'Erro ao atualizar status de pagamento' });
+    console.error('Stack:', error.stack);
+    console.error('Código do erro:', error.code);
+    console.error('Mensagem:', error.message);
+    res.status(500).json({ 
+      error: 'Erro ao atualizar status de pagamento',
+      details: error.message,
+      code: error.code
+    });
   }
 });
 

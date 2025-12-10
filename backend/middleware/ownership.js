@@ -1,7 +1,7 @@
 import { db } from '../database/db.js';
 
 // Middleware para verificar se o usuário é dono do produto
-export function requireProductOwnership(req, res, next) {
+export async function requireProductOwnership(req, res, next) {
   try {
     const productId = req.params.id;
     const userId = req.user.id;
@@ -12,15 +12,23 @@ export function requireProductOwnership(req, res, next) {
       return next();
     }
 
+    if (!productId) {
+      return res.status(400).json({ error: 'ID do produto é obrigatório' });
+    }
+
     // Buscar produto e verificar se pertence à loja do usuário
-    const product = db.prepare('SELECT store_id FROM products WHERE id = ?').get(productId);
+    const product = await db.prepare('SELECT store_id FROM products WHERE id = ?').get(productId);
     
     if (!product) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
 
+    if (!product.store_id) {
+      return res.status(403).json({ error: 'Produto não está vinculado a nenhuma loja' });
+    }
+
     // Verificar se o usuário é dono da loja
-    const store = db.prepare('SELECT user_id FROM stores WHERE id = ?').get(product.store_id);
+    const store = await db.prepare('SELECT user_id FROM stores WHERE id = ?').get(product.store_id);
     
     if (!store || store.user_id !== userId) {
       return res.status(403).json({ error: 'Você não tem permissão para acessar este produto' });
@@ -34,7 +42,7 @@ export function requireProductOwnership(req, res, next) {
 }
 
 // Middleware para verificar se o usuário é dono da loja
-export function requireStoreOwnership(req, res, next) {
+export async function requireStoreOwnership(req, res, next) {
   try {
     const storeId = req.params.id || req.body.store_id;
     const userId = req.user.id;
@@ -50,7 +58,7 @@ export function requireStoreOwnership(req, res, next) {
     }
 
     // Verificar se o usuário é dono da loja
-    const store = db.prepare('SELECT user_id FROM stores WHERE id = ?').get(storeId);
+    const store = await db.prepare('SELECT user_id FROM stores WHERE id = ?').get(storeId);
     
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
@@ -68,11 +76,15 @@ export function requireStoreOwnership(req, res, next) {
 }
 
 // Middleware para verificar se o usuário é dono do pedido (cliente ou lojista)
-export function requireOrderAccess(req, res, next) {
+export async function requireOrderAccess(req, res, next) {
   try {
     const orderId = req.params.id;
     const userId = req.user.id;
     const userRole = req.user.role;
+
+    if (!orderId) {
+      return res.status(400).json({ error: 'ID do pedido é obrigatório' });
+    }
 
     // Admin pode acessar qualquer pedido
     if (userRole === 'admin') {
@@ -80,7 +92,7 @@ export function requireOrderAccess(req, res, next) {
     }
 
     // Buscar pedido
-    const order = db.prepare('SELECT user_id, store_id FROM orders WHERE id = ?').get(orderId);
+    const order = await db.prepare('SELECT user_id, store_id FROM orders WHERE id = ?').get(orderId);
     
     if (!order) {
       return res.status(404).json({ error: 'Pedido não encontrado' });
@@ -92,8 +104,8 @@ export function requireOrderAccess(req, res, next) {
     }
 
     // Verificar se é o lojista que recebeu o pedido
-    if (userRole === 'store') {
-      const store = db.prepare('SELECT id FROM stores WHERE id = ? AND user_id = ?').get(order.store_id, userId);
+    if (userRole === 'store' && order.store_id) {
+      const store = await db.prepare('SELECT id FROM stores WHERE id = ? AND user_id = ?').get(order.store_id, userId);
       if (store) {
         return next();
       }

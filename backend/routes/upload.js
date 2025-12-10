@@ -6,6 +6,7 @@ import { dirname } from 'path';
 import { authenticateToken } from '../middleware/auth.js';
 import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
+import sharp from 'sharp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,16 +19,7 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
 
-// Configurar multer
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueName = `${uuidv4()}${path.extname(file.originalname)}`;
-    cb(null, uniqueName);
-  }
-});
+const fsPromises = fs.promises;
 
 // Extensões permitidas
 const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
@@ -74,16 +66,72 @@ const fileFilter = (req, file, cb) => {
   cb(null, true);
 };
 
-const maxFileSize = parseInt(process.env.MAX_FILE_SIZE) || 5 * 1024 * 1024; // 5MB padrão
+const maxFileSize = parseInt(process.env.MAX_FILE_SIZE, 10) || 25 * 1024 * 1024; // 25MB limite duro
+const compressionThreshold = parseInt(process.env.UPLOAD_COMPRESSION_THRESHOLD, 10) || 5 * 1024 * 1024; // 5MB
+const optimizedMaxSize = parseInt(process.env.UPLOAD_OPTIMIZED_MAX_SIZE, 10) || 5 * 1024 * 1024; // 5MB
+const maxImageDimension = parseInt(process.env.UPLOAD_MAX_IMAGE_DIMENSION, 10) || 1920;
 
 const upload = multer({
-  storage: storage,
+  storage: multer.memoryStorage(),
   limits: {
     fileSize: maxFileSize,
     files: 10 // Máximo de arquivos por requisição
   },
   fileFilter: fileFilter
 });
+
+async function optimizeImage(file) {
+  const originalSize = file.size;
+  const originalExt = path.extname(file.originalname).toLowerCase();
+  const originalMime = file.mimetype;
+
+  if (originalSize <= compressionThreshold) {
+    return {
+      buffer: file.buffer,
+      extension: originalExt,
+      mimetype: originalMime,
+      optimized: false,
+      originalSize,
+      finalSize: originalSize
+    };
+  }
+
+  let quality = 85;
+  const minQuality = 50;
+  let processed = {
+    data: file.buffer,
+    info: null
+  };
+
+  while (quality >= minQuality) {
+    processed = await sharp(file.buffer)
+      .rotate()
+      .resize({
+        width: maxImageDimension,
+        height: maxImageDimension,
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .webp({ quality, effort: 4 })
+      .toBuffer({ resolveWithObject: true });
+
+    if (processed.data.length <= optimizedMaxSize || quality === minQuality) {
+      break;
+    }
+
+    quality -= 10;
+  }
+
+  return {
+    buffer: processed.data,
+    extension: '.webp',
+    mimetype: 'image/webp',
+    optimized: true,
+    originalSize,
+    finalSize: processed.data.length,
+    metadata: processed.info
+  };
+}
 
 // Rota de upload de arquivo único
 router.post('/', authenticateToken, (req, res, next) => {
@@ -99,21 +147,29 @@ router.post('/', authenticateToken, (req, res, next) => {
     }
     next();
   });
-}, (req, res) => {
+}, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Nenhum arquivo enviado' });
     }
 
+    const processed = await optimizeImage(req.file);
+    const uniqueName = `${uuidv4()}${processed.extension}`;
+    const finalPath = path.join(uploadsDir, uniqueName);
+
+    await fsPromises.writeFile(finalPath, processed.buffer);
+
     // URL completa para servir o arquivo
-    const fileUrl = `${req.protocol}://${req.get('host')}/api/upload/uploads/${req.file.filename}`;
+    const fileUrl = `${req.protocol}://${req.get('host')}/api/upload/uploads/${uniqueName}`;
     
     res.json({
       file_url: fileUrl,
-      filename: req.file.filename,
+      filename: uniqueName,
       originalname: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype
+      size: processed.finalSize,
+      mimetype: processed.mimetype,
+      optimized: processed.optimized,
+      original_size: processed.originalSize
     });
   } catch (error) {
     console.error('Erro no upload:', error);

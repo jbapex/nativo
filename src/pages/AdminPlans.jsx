@@ -176,8 +176,8 @@ export default function AdminPlans() {
       name: plan.name,
       slug: slug || "standard",
       description: plan.description || "",
-      price: plan.price,
-      yearly_price: plan.yearly_price || plan.price * 10,
+      price: Number(plan.price) || 0, // Converter para número
+      yearly_price: Number(plan.yearly_price) || Number(plan.price) * 10 || 0, // Converter para número
       features: plan.features || [],
       product_limit: plan.product_limit,
       featured: plan.featured || false,
@@ -470,10 +470,10 @@ export default function AdminPlans() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {plan.price === 0 ? (
+                        {Number(plan.price) === 0 ? (
                           <span className="text-green-600 font-medium">Grátis</span>
                         ) : (
-                          <span>R$ {plan.price.toFixed(2)}</span>
+                          <span>R$ {(Number(plan.price) || 0).toFixed(2)}</span>
                         )}
                       </TableCell>
                       <TableCell>

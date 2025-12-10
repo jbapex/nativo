@@ -14,7 +14,7 @@ import {
   RefreshCw,
   XCircle,
 } from "lucide-react";
-import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation, useParams } from 'react-router-dom';
 import { createPageUrl } from "@/utils";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { toast } from "@/components/ui/use-toast";
@@ -30,6 +30,8 @@ import StoreMarketingPage from "./store/StoreMarketingPage";
 import StoreSettingsPage from "./store/StoreSettingsPage";
 import StoreOnlinePage from "./store/StoreOnlinePage";
 import BecomeSeller from "../components/store/BecomeSeller";
+import StoreCampaignsPage from "./store/StoreCampaignsPage";
+import StoreCustomLinkPage from "./store/StoreCustomLinkPage";
 
 const LoadingFallback = () => (
   <div className="p-8 flex justify-center">
@@ -45,7 +47,7 @@ export const pagePermissions = {
 export default function StoreProfile() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const params = useParams();
   const [user, setUser] = useState(null);
   const [store, setStore] = useState(null);
   const [products, setProducts] = useState([]);
@@ -55,10 +57,60 @@ export default function StoreProfile() {
   const [error, setError] = useState("");
   const [sellerDialogOpen, setSellerDialogOpen] = useState(false);
   
-  // Determinar qual página mostrar baseado na URL
+  console.log("🎨 StoreProfile: Renderizando componente", { 
+    loading, 
+    hasStore: !!store, 
+    hasUser: !!user,
+    pathname: location.pathname,
+    error: error?.message || null
+  });
+  
+  // Proteção contra renderização com erro não tratado
+  if (error && !error.handled) {
+    console.error("❌ StoreProfile: Erro não tratado detectado:", error);
+    return (
+      <div className="min-h-screen bg-gray-50 py-12 flex items-center justify-center">
+        <div className="max-w-md w-full mx-auto px-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Erro ao carregar sua loja:</strong>
+              <br />
+              {error.message || "Erro desconhecido"}
+              <br />
+              <Button 
+                onClick={() => window.location.reload()} 
+                className="mt-4"
+                variant="outline"
+              >
+                Recarregar Página
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
+  
+  // Determinar qual página mostrar baseado na rota
   const getCurrentPage = () => {
-    const page = searchParams.get('page') || 'dashboard';
-    return page;
+    const path = location.pathname;
+    
+    // Mapear rotas para páginas
+    if (path.includes('/produtos') || path.includes('/products')) return 'products';
+    if (path.includes('/pedidos') || path.includes('/orders')) return 'orders';
+    if (path.includes('/estatisticas') || path.includes('/analytics')) return 'analytics';
+    if (path.includes('/marketing')) return 'marketing';
+    if (path.includes('/campanhas') || path.includes('/campaigns')) return 'campaigns';
+    if (path.includes('/assinatura') || path.includes('/subscription')) return 'subscription';
+    if (path.includes('/configuracoes') || path.includes('/settings')) return 'settings';
+    if (path.includes('/online')) return 'online';
+    if (path.includes('/link-personalizado') || path.includes('/custom-link')) return 'custom-link';
+    if (path.includes('/dashboard') || path.includes('/perfil') || path.includes('/profile')) return 'dashboard';
+    
+    // Fallback para query params (compatibilidade)
+    const urlParams = new URLSearchParams(location.search);
+    return urlParams.get('page') || 'dashboard';
   };
   
   useEffect(() => {
@@ -77,6 +129,7 @@ export default function StoreProfile() {
   }, []);
 
   const loadData = async () => {
+    console.log("🔄 StoreProfile: Iniciando loadData...");
     setLoading(true);
     setError("");
     
@@ -85,10 +138,13 @@ export default function StoreProfile() {
       let userData = null;
       try {
         userData = await User.me();
-        setUser(userData);
+        console.log("✅ StoreProfile: Usuário autenticado:", userData?.email);
+      setUser(userData);
       } catch (authError) {
         // Usuário não está logado - continuar sem bloquear
+        console.log("ℹ️ StoreProfile: Usuário não autenticado");
         setUser(null);
+        setStore(null);
         setLoading(false);
         return; // Retornar aqui para mostrar tela de cadastro sem loja
       }
@@ -172,14 +228,23 @@ export default function StoreProfile() {
             console.log("Nenhum plano encontrado - loja sem plan_id e sem assinatura");
           }
         } catch (dataError) {
-          console.error("Erro ao carregar dados relacionados:", dataError);
+          console.error("❌ StoreProfile: Erro ao carregar dados relacionados:", dataError);
         }
+        console.log("✅ StoreProfile: Dados da loja carregados com sucesso");
+      } else {
+        console.log("ℹ️ StoreProfile: Nenhuma loja encontrada para o usuário");
       }
     } catch (error) {
-      console.error("Erro ao carregar dados:", error);
+      console.error("❌ StoreProfile: Erro ao carregar dados:", error);
       setError("Erro ao carregar dados. Verifique sua conexão e tente novamente.");
     } finally {
+      console.log("✅ StoreProfile: loadData finalizado - setLoading(false)");
       setLoading(false);
+      console.log("✅ StoreProfile: Estado após loadData", { 
+        loading: false, 
+        hasStore: !!store, 
+        hasUser: !!user 
+      });
     }
   };
 
@@ -246,8 +311,18 @@ export default function StoreProfile() {
   };
 
   if (loading) {
+    console.log("🔄 StoreProfile: Carregando...");
     return <LoadingFallback />;
   }
+  
+  console.log("📊 StoreProfile: Estado atual", { 
+    loading, 
+    error, 
+    hasUser: !!user, 
+    hasStore: !!store,
+    storeStatus: store?.status,
+    location: location.pathname
+  });
 
   if (error) {
     return (
@@ -342,19 +417,19 @@ export default function StoreProfile() {
   if (store.status !== 'approved' && !isSettingsPage) {
     const isPending = store.status === 'pending';
     const isRejected = store.status === 'rejected';
-    
-    return (
+
+  return (
       <div className="min-h-screen bg-gray-50 py-12">
         <div className="max-w-3xl mx-auto px-4">
-          <Button 
+              <Button 
             variant="outline" 
-            onClick={navigateToHome} 
+                onClick={navigateToHome}
             className="flex items-center mb-8"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar para Home
-          </Button>
-          
+              </Button>
+              
           <div className="bg-white rounded-lg shadow-sm border p-8">
             <div className="max-w-xl mx-auto text-center">
               <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${
@@ -365,8 +440,8 @@ export default function StoreProfile() {
                 ) : (
                   <XCircle className="w-8 h-8 text-red-600" />
                 )}
-              </div>
-              
+            </div>
+            
               <h1 className="text-2xl font-bold text-gray-900 mb-4">
                 {isPending 
                   ? "Aguardando Aprovação" 
@@ -390,24 +465,24 @@ export default function StoreProfile() {
               )}
               
               <div className="flex gap-4 justify-center">
-                <Button 
+                <Button
                   variant="outline"
                   onClick={navigateToHome}
                 >
                   Voltar para Home
                 </Button>
                 {isPending && (
-                  <Button 
+                <Button
                     onClick={() => {
                       // Permitir acesso às configurações mesmo pendente
-                      navigate(createPageUrl("StoreProfile") + "?page=settings");
+                      navigate("/loja/configuracoes");
                     }}
                     className="bg-blue-600 hover:bg-blue-700"
                   >
                     Ver Configurações
                   </Button>
                 )}
-              </div>
+                </div>
             </div>
           </div>
         </div>
@@ -417,36 +492,234 @@ export default function StoreProfile() {
 
   // Renderizar página baseada na URL
   const renderPage = () => {
-    const page = getCurrentPage();
-    
-    switch (page) {
-      case 'products':
-        return <StoreProductsPage store={store} products={products} onProductsChange={loadData} />;
-      case 'orders':
-        return <StoreOrdersPage />;
-      case 'subscription':
-        return <StoreSubscriptionPage store={store} subscription={subscription} plan={plan} />;
-      case 'analytics':
-        return <StoreAnalyticsPage store={store} products={products} />;
-      case 'marketing':
-        return <StoreMarketingPage store={store} products={products} />;
-      case 'settings':
-        return <StoreSettingsPage store={store} user={user} subscription={subscription} plan={plan} onUpdate={loadData} />;
-      case 'online':
-        return isStoreOnlineActive() ? <StoreOnlinePage store={store} /> : null;
-      case 'dashboard':
-      default:
-        return <StoreDashboardPage store={store} products={products} plan={plan} isStoreOnlineActive={isStoreOnlineActive()} />;
+    try {
+      const page = getCurrentPage();
+      console.log("📄 StoreProfile: Renderizando página:", page, "pathname:", location.pathname);
+      
+      // Proteção: se não houver store e não for página de configurações, mostrar mensagem
+      if (!store && page !== 'settings') {
+        console.warn("⚠️ StoreProfile: Tentando renderizar página sem loja:", page);
+        // Isso será tratado no bloco de renderização principal
+      }
+      
+      let pageComponent = null;
+      
+      try {
+        switch (page) {
+          case 'products':
+            pageComponent = <StoreProductsPage store={store} products={products} onProductsChange={loadData} />;
+            break;
+          case 'orders':
+            pageComponent = <StoreOrdersPage />;
+            break;
+          case 'subscription':
+            pageComponent = <StoreSubscriptionPage store={store} subscription={subscription} plan={plan} />;
+            break;
+          case 'analytics':
+            pageComponent = <StoreAnalyticsPage store={store} products={products} />;
+            break;
+          case 'marketing':
+            pageComponent = <StoreMarketingPage store={store} products={products} />;
+            break;
+          case 'campaigns':
+            pageComponent = <StoreCampaignsPage store={store} products={products} />;
+            break;
+          case 'custom-link':
+            pageComponent = <StoreCustomLinkPage store={store} onUpdate={loadData} />;
+            break;
+          case 'settings':
+            pageComponent = <StoreSettingsPage store={store} user={user} subscription={subscription} plan={plan} onUpdate={loadData} />;
+            break;
+          case 'online':
+            pageComponent = <StoreOnlinePage store={store} plan={plan} subscription={subscription} isStoreOnlineActive={isStoreOnlineActive()} />;
+            break;
+          case 'dashboard':
+          default:
+            console.log("📊 StoreProfile: Criando StoreDashboardPage", { 
+              hasStore: !!store, 
+              productsCount: products?.length 
+            });
+            pageComponent = <StoreDashboardPage store={store} products={products} plan={plan} isStoreOnlineActive={isStoreOnlineActive()} />;
+            break;
+        }
+      } catch (componentError) {
+        console.error("❌ StoreProfile: Erro ao criar componente da página:", componentError);
+        console.error("❌ StoreProfile: Stack trace do componente:", componentError.stack);
+        return (
+          <div className="p-8">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Erro ao criar componente da página: {page}
+                <br />
+                <small>{componentError.message}</small>
+                </AlertDescription>
+              </Alert>
+          </div>
+        );
+      }
+      
+      console.log("✅ StoreProfile: Componente da página criado:", pageComponent ? "Sim" : "Não");
+      
+      if (!pageComponent) {
+        console.error("❌ StoreProfile: pageComponent é null/undefined para página:", page);
+        return (
+          <div className="p-8">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                Erro: Componente da página não pôde ser criado.
+              </AlertDescription>
+            </Alert>
+      </div>
+        );
+      }
+      
+      return pageComponent;
+    } catch (error) {
+      console.error("❌ StoreProfile: Erro ao renderizar página:", error);
+      console.error("❌ StoreProfile: Stack trace:", error.stack);
+      return (
+        <div className="p-8">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Erro ao carregar a página. Por favor, recarregue a página.
+              <br />
+              <small>{error.message}</small>
+            </AlertDescription>
+          </Alert>
+                </div>
+      );
     }
   };
 
-  return (
-    <StoreLayout 
-      store={store} 
-      plan={plan} 
-      isStoreOnlineActive={isStoreOnlineActive()}
-    >
-      {renderPage()}
-    </StoreLayout>
+  // Garantir que sempre há algo para renderizar
+  if (!store) {
+    // Se chegou aqui sem store, mostrar tela de cadastro
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-5xl mx-auto px-4">
+                <Button
+                  variant="outline"
+            onClick={navigateToHome} 
+            className="flex items-center mb-8"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar para Home
+                </Button>
+          
+          <div className="bg-white rounded-lg shadow-sm border p-8">
+            <div className="max-w-xl mx-auto text-center">
+              <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+                <StoreIcon className="w-8 h-8 text-blue-600" />
+              </div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">Comece a Vender</h1>
+              <p className="text-gray-600 mb-8">
+                {user 
+                  ? "Você ainda não tem uma loja no NATIVO. Cadastre sua loja e comece a vender seus produtos hoje mesmo."
+                  : "Para cadastrar sua loja, você precisa fazer login ou criar uma conta. Vamos começar?"
+                }
+              </p>
+              
+              <Button 
+                onClick={handleCreateStore}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <StoreIcon className="w-4 h-4 mr-2" />
+                {user ? "Cadastrar Loja" : "Fazer Login e Cadastrar Loja"}
+              </Button>
+              </div>
+              </div>
+            </div>
+
+      <Dialog open={sellerDialogOpen} onOpenChange={setSellerDialogOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <BecomeSeller 
+            onClose={() => setSellerDialogOpen(false)}
+            onSuccess={() => {
+              setSellerDialogOpen(false);
+              loadData();
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+    </div>
   );
+  }
+
+  console.log("🎯 StoreProfile: Renderizando StoreLayout", { 
+    hasStore: !!store, 
+    hasPlan: !!plan,
+    isStoreOnlineActive: isStoreOnlineActive(),
+    storeName: store?.name,
+    productsCount: products?.length
+  });
+  
+  let pageContent = null;
+  try {
+    pageContent = renderPage();
+    console.log("📦 StoreProfile: Conteúdo da página:", pageContent ? "Criado" : "NULL/UNDEFINED");
+  } catch (renderPageError) {
+    console.error("❌ StoreProfile: Erro ao chamar renderPage():", renderPageError);
+    console.error("❌ StoreProfile: Stack trace:", renderPageError.stack);
+    pageContent = (
+      <div className="p-8">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Erro ao renderizar página: {renderPageError.message}
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+  
+  if (!pageContent) {
+    console.error("❌ StoreProfile: renderPage() retornou null/undefined!");
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-5xl mx-auto px-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Erro: A página não pôde ser renderizada. Por favor, recarregue a página.
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
+  
+  try {
+    console.log("🎯 StoreProfile: Tentando renderizar StoreLayout com pageContent");
+    const layout = (
+      <StoreLayout 
+        store={store} 
+        plan={plan} 
+        isStoreOnlineActive={isStoreOnlineActive()}
+      >
+        {pageContent}
+      </StoreLayout>
+    );
+    console.log("✅ StoreProfile: StoreLayout criado com sucesso");
+    return layout;
+  } catch (renderError) {
+    console.error("❌ StoreProfile: Erro ao renderizar StoreLayout:", renderError);
+    console.error("❌ StoreProfile: Stack trace:", renderError.stack);
+    return (
+      <div className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-5xl mx-auto px-4">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              Erro ao renderizar a página. Por favor, recarregue a página.
+              <br />
+              <small>{renderError.message}</small>
+            </AlertDescription>
+          </Alert>
+        </div>
+      </div>
+    );
+  }
 }

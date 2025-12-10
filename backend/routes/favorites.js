@@ -6,9 +6,14 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 
 // Listar favoritos do usuário
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
-    const favorites = db.prepare(`
+    // Validar user
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const favorites = await db.prepare(`
       SELECT uf.*,
              p.id as product_id,
              p.name as product_name,
@@ -38,9 +43,17 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Verificar se produto está nos favoritos
-router.get('/check/:productId', authenticateToken, (req, res) => {
+router.get('/check/:productId', authenticateToken, async (req, res) => {
   try {
-    const favorite = db.prepare(`
+    // Validar ID e user
+    if (!req.params.productId || req.params.productId === 'undefined') {
+      return res.status(400).json({ error: 'ID do produto é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
+    const favorite = await db.prepare(`
       SELECT id FROM user_favorites 
       WHERE user_id = ? AND product_id = ?
     `).get(req.user.id, req.params.productId);
@@ -53,18 +66,26 @@ router.get('/check/:productId', authenticateToken, (req, res) => {
 });
 
 // Adicionar aos favoritos
-router.post('/:productId', authenticateToken, (req, res) => {
+router.post('/:productId', authenticateToken, async (req, res) => {
   try {
+    // Validar ID e user
+    if (!req.params.productId || req.params.productId === 'undefined') {
+      return res.status(400).json({ error: 'ID do produto é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     const { productId } = req.params;
     
     // Verificar se produto existe
-    const product = db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
+    const product = await db.prepare('SELECT id FROM products WHERE id = ?').get(productId);
     if (!product) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
     
     // Verificar se já está nos favoritos
-    const existing = db.prepare(`
+    const existing = await db.prepare(`
       SELECT id FROM user_favorites 
       WHERE user_id = ? AND product_id = ?
     `).get(req.user.id, productId);
@@ -75,13 +96,13 @@ router.post('/:productId', authenticateToken, (req, res) => {
     
     // Adicionar aos favoritos
     const id = uuidv4();
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO user_favorites (id, user_id, product_id)
       VALUES (?, ?, ?)
     `).run(id, req.user.id, productId);
     
     // Atualizar contador de favoritos do produto
-    db.prepare(`
+    await db.prepare(`
       UPDATE products 
       SET total_favorites = COALESCE(total_favorites, 0) + 1
       WHERE id = ?
@@ -95,11 +116,19 @@ router.post('/:productId', authenticateToken, (req, res) => {
 });
 
 // Remover dos favoritos
-router.delete('/:productId', authenticateToken, (req, res) => {
+router.delete('/:productId', authenticateToken, async (req, res) => {
   try {
+    // Validar ID e user
+    if (!req.params.productId || req.params.productId === 'undefined') {
+      return res.status(400).json({ error: 'ID do produto é obrigatório' });
+    }
+    if (!req.user?.id) {
+      return res.status(401).json({ error: 'Usuário não autenticado' });
+    }
+
     const { productId } = req.params;
     
-    const favorite = db.prepare(`
+    const favorite = await db.prepare(`
       SELECT id FROM user_favorites 
       WHERE user_id = ? AND product_id = ?
     `).get(req.user.id, productId);
@@ -108,15 +137,15 @@ router.delete('/:productId', authenticateToken, (req, res) => {
       return res.status(404).json({ error: 'Favorito não encontrado' });
     }
     
-    db.prepare(`
+    await db.prepare(`
       DELETE FROM user_favorites 
       WHERE user_id = ? AND product_id = ?
     `).run(req.user.id, productId);
     
     // Atualizar contador de favoritos do produto
-    const currentFavorites = db.prepare('SELECT total_favorites FROM products WHERE id = ?').get(productId);
+    const currentFavorites = await db.prepare('SELECT total_favorites FROM products WHERE id = ?').get(productId);
     const newCount = Math.max((currentFavorites?.total_favorites || 0) - 1, 0);
-    db.prepare(`
+    await db.prepare(`
       UPDATE products 
       SET total_favorites = ?
       WHERE id = ?

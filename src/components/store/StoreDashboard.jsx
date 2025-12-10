@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from "react";
+import { THUMBNAIL_PLACEHOLDER, handleImageError } from "@/utils/imagePlaceholder";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { 
@@ -313,9 +314,10 @@ export default function StoreDashboard({ store, products, stats = {} }) {
                   <div key={product.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg">
                     <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
                       <img 
-                        src={product.images?.[0] || "https://via.placeholder.com/50"} 
+                        src={product.images?.[0] || THUMBNAIL_PLACEHOLDER} 
                         alt={product.name} 
                         className="w-full h-full object-cover"
+                        onError={(e) => handleImageError(e, THUMBNAIL_PLACEHOLDER)}
                       />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -367,9 +369,10 @@ export default function StoreDashboard({ store, products, stats = {} }) {
                   <div key={product.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg">
                     <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
                       <img 
-                        src={product.images?.[0] || "https://via.placeholder.com/50"} 
+                        src={product.images?.[0] || THUMBNAIL_PLACEHOLDER} 
                         alt={product.name} 
                         className="w-full h-full object-cover"
+                        onError={(e) => handleImageError(e, THUMBNAIL_PLACEHOLDER)}
                       />
                     </div>
                     <div className="flex-1 min-w-0">

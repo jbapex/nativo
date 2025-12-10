@@ -22,10 +22,15 @@ import {
   ArrowRight,
   ChevronLeft,
   ShoppingCart,
+  Store as StoreIcon,
+  Percent,
+  CreditCard,
+  MessageCircle,
 } from "lucide-react";
 import { StoreOnlineHeader, StoreOnlineFooter } from "@/components/store/StoreOnlineLayout";
 import { useToast } from "@/components/ui/use-toast";
 import LoginDialog from "@/components/LoginDialog";
+import { formatCurrency } from "@/lib/utils";
 
 export const pagePermissions = {
   public: true,
@@ -48,7 +53,7 @@ function BannerAutoPlay({ banners, currentIndex, setCurrentIndex }) {
 }
 
 // Componente de Card de Produto
-function ProductCard({ product, theme, store, onAddToCart, user, addingToCart }) {
+function ProductCard({ product, theme, store, customizations, onAddToCart, user, addingToCart }) {
   // Verificar se tem promoção ou compare_price
   const hasDiscount = (product.compare_price && product.compare_price > product.price) || 
                      (product.has_promotion && product.promotion);
@@ -58,136 +63,136 @@ function ProductCard({ product, theme, store, onAddToCart, user, addingToCart })
         : 0))
     : 0;
 
-  const formatCurrency = (value) => {
-    if (value === undefined || value === null) return "R$ 0,00";
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(value);
-  };
+  // Calcular preço Pix (5% de desconto)
+  const pixPrice = product.price ? product.price * 0.95 : 0;
+  
+  // Média de avaliação (se disponível)
+  const averageRating = product.average_rating || 0;
+  const ratingStars = Math.round(averageRating) || 0;
+
+  // formatCurrency agora vem de @/lib/utils
+
+  // WhatsApp da loja
+  const whatsappNumber = customizations?.whatsapp_number || store?.whatsapp_number;
+  const whatsappLink = whatsappNumber 
+    ? `https://wa.me/${whatsappNumber.replace(/\D/g, '')}?text=Olá! Tenho interesse no produto: ${encodeURIComponent(product.name)}`
+    : '#';
+
+  const priceColor = customizations?.product_price_color || theme.product_price || '#f97316';
+  const buttonColor = customizations?.product_button_color || theme.product_button || '#f97316';
 
   return (
-    <Link 
-      to={`/produto/${product.id}`}
-      className="block group"
-    >
-      <Card className="h-full overflow-hidden border-2 hover:border-opacity-100 transition-all duration-300 hover:shadow-xl bg-white">
-        <div className="aspect-square relative bg-gray-100 overflow-hidden">
-          {product.images?.[0] ? (
-            <img
-              src={product.images[0]}
-              alt={product.name}
-              className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+    <Card className="h-full overflow-hidden border border-gray-200 hover:border-opacity-100 hover:shadow-lg transition-all duration-300 bg-white flex flex-col">
+      <div className="aspect-square relative bg-gray-100 overflow-hidden">
+        {product.images?.[0] ? (
+          <img
+            src={product.images[0]}
+            alt={product.name}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <ShoppingBag className="h-16 w-16 text-gray-300" />
+          </div>
+        )}
+        
+        {/* Badge de desconto no canto superior direito */}
+        {hasDiscount && discountPercent > 0 && (
+          <div className="absolute top-2 right-2">
+            <Badge className="bg-orange-500 text-white font-bold px-2 py-1 text-sm">
+              ↓{discountPercent}%
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      <CardContent className="p-4 flex-1 flex flex-col items-center text-center">
+        {/* Título do produto */}
+        <h3 className="font-semibold text-base mb-2 line-clamp-2 min-h-[3rem] text-gray-900">
+          {product.name}
+        </h3>
+        
+        {/* Avaliação com estrelas */}
+        <div className="flex items-center justify-center gap-1 mb-3">
+          {[...Array(5)].map((_, i) => (
+            <Star
+              key={i}
+              className={`w-4 h-4 ${
+                i < ratingStars
+                  ? 'fill-yellow-400 text-yellow-400'
+                  : 'fill-gray-200 text-gray-200'
+              }`}
             />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <ShoppingBag className="h-16 w-16 text-gray-300" />
+          ))}
+        </div>
+        
+        {/* Preços */}
+        <div className="mb-3 text-center">
+          {hasDiscount && product.compare_price && (
+            <div className="text-sm text-gray-500 line-through mb-1">
+              {formatCurrency(product.compare_price)}
             </div>
           )}
-          
-          {hasDiscount && discountPercent > 0 && (
-            <div className="absolute top-2 left-2">
-              <Badge className="bg-red-500 text-white font-bold px-2 py-1 text-xs">
-                {discountPercent}% OFF
-              </Badge>
-            </div>
-          )}
-          
-          {product.promotion && product.promotion.discount_type === 'free_shipping' && (
-            <div className="absolute top-2 left-2">
-              <Badge className="bg-green-500 text-white font-bold px-2 py-1 text-xs">
-                Frete Grátis
-              </Badge>
-            </div>
-          )}
-
-          {product.featured && (
-            <div className="absolute top-2 right-2">
-              <Badge className="bg-yellow-500 text-white font-bold px-2 py-1 text-xs flex items-center gap-1">
-                <Star className="w-3 h-3 fill-white" />
-                Destaque
-              </Badge>
-            </div>
-          )}
-
-          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-5 transition-opacity duration-300"></div>
+          <div className="text-2xl font-bold mb-1" style={{ color: priceColor }}>
+            {formatCurrency(product.price)}
+          </div>
+          <div className="text-sm text-gray-600">
+            {formatCurrency(pixPrice)} à vista com desconto Pix
+          </div>
         </div>
 
-        <CardContent className="p-4">
-          <h3 className="font-semibold text-sm mb-2 line-clamp-2 min-h-[2.5rem] group-hover:text-opacity-80 transition-colors">
-            {product.name}
-          </h3>
+        {/* Botões */}
+        <div className="mt-auto space-y-2 w-full">
+          <Button
+            className="w-full text-sm font-semibold shadow-sm hover:shadow-md transition-shadow"
+            style={{ backgroundColor: buttonColor, color: 'white', width: '100%' }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              // Usar slug se disponível, senão usar ID
+              const productLink = store?.slug 
+                ? `/${store.slug}/produto/${product.id}`
+                : `/loja-online/${store.id}/produto/${product.id}`;
+              window.location.href = productLink;
+            }}
+          >
+            Ver produto
+          </Button>
           
-          <div className="mb-3">
-            <div className="flex items-baseline gap-2">
-              <span 
-                className="text-xl font-bold"
-                style={{ color: theme.primary }}
-              >
-                {formatCurrency(product.price)}
-              </span>
-              {hasDiscount && (
-                <span className="text-xs text-gray-500 line-through">
-                  {formatCurrency(product.compare_price)}
-                </span>
-              )}
-            </div>
-            {product.price > 100 && (
-              <p className="text-xs text-gray-600 mt-1">
-                em até 12x sem juros
-              </p>
-            )}
-          </div>
-
-          {product.price > 19 && (
-            <div className="flex items-center gap-1 text-xs text-green-600 font-medium mb-3">
-              <Truck className="w-3 h-3" />
-              Frete grátis
-            </div>
-          )}
-
-          {/* Botões de Ação */}
-          {store?.checkout_enabled ? (
-            <div className="flex gap-2">
-              <Button
-                className="flex-1 text-sm font-semibold shadow-sm hover:shadow-md transition-shadow bg-blue-600 hover:bg-blue-700"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (onAddToCart) onAddToCart(product);
-                }}
-                disabled={addingToCart?.[product.id]}
-              >
-                <ShoppingCart className="w-4 h-4 mr-1" />
-                {addingToCart?.[product.id] ? "Adicionando..." : "Carrinho"}
-              </Button>
-              <Button
-                className="flex-1 text-sm font-semibold shadow-sm hover:shadow-md transition-shadow"
-                style={{ backgroundColor: theme.primary, color: 'white' }}
-                onClick={(e) => e.preventDefault()}
-              >
-                Ver Detalhes
-              </Button>
-            </div>
-          ) : (
-            <Button
-              className="w-full text-sm font-semibold shadow-sm hover:shadow-md transition-shadow"
-              style={{ backgroundColor: theme.primary, color: 'white' }}
-              onClick={(e) => e.preventDefault()}
+          {whatsappNumber && (
+            <a
+              href={whatsappLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-sm font-semibold rounded-md shadow-sm hover:shadow-md transition-all"
             >
-              Ver Detalhes
-            </Button>
+              <MessageCircle className="w-4 h-4" />
+              Dúvidas? Fale no WhatsApp
+            </a>
           )}
-        </CardContent>
-      </Card>
-    </Link>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 export default function StoreOnlineHome() {
-  const { id: storeId } = useParams();
+  const { id: urlStoreId } = useParams();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  
+  // Tentar pegar o storeId resolvido do sessionStorage (do router)
+  // Se não tiver, usar o da URL e tentar resolver (pode ser slug)
+  const [storeId, setStoreId] = useState(() => {
+    const resolved = sessionStorage.getItem('resolvedStoreId');
+    if (resolved) {
+      sessionStorage.removeItem('resolvedStoreId'); // Limpar após usar
+      return resolved;
+    }
+    return urlStoreId;
+  });
+  
   const [store, setStore] = useState(null);
   const [customizations, setCustomizations] = useState(null);
   const [products, setProducts] = useState([]);
@@ -201,11 +206,52 @@ export default function StoreOnlineHome() {
   const [addingToCart, setAddingToCart] = useState({});
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
 
+  // Quando a URL mudar, verificar se precisa resolver o slug
   useEffect(() => {
-    // Marcar que estamos na página StoreOnline (loja individual)
-    sessionStorage.setItem('lastPageSource', 'store');
-    loadStoreOnline();
-    checkUser();
+    const resolved = sessionStorage.getItem('resolvedStoreId');
+    if (resolved) {
+      sessionStorage.removeItem('resolvedStoreId');
+      setStoreId(resolved);
+      return;
+    }
+    
+    // Se o urlStoreId mudou e não é o mesmo do storeId atual, atualizar
+    if (urlStoreId && urlStoreId !== storeId) {
+      setStoreId(urlStoreId);
+    }
+  }, [urlStoreId]);
+  
+  useEffect(() => {
+    // Se o storeId não é um UUID, pode ser um slug - tentar resolver
+    const isUUID = storeId && storeId.length === 36 && storeId.includes('-');
+    
+    if (!isUUID && storeId) {
+      // Tentar buscar a loja pelo slug para obter o ID real
+      const resolveSlug = async () => {
+        try {
+          console.log('🔄 Resolvendo slug para ID:', storeId);
+          const { Store } = await import("@/api/entities");
+          const store = await Store.get(storeId);
+          if (store && store.id) {
+            console.log('✅ Slug resolvido para ID:', store.id);
+            setStoreId(store.id);
+            return;
+          }
+        } catch (error) {
+          console.error('❌ Erro ao resolver slug:', error);
+        }
+      };
+      resolveSlug();
+      return; // Não carregar ainda, esperar o ID ser resolvido
+    }
+    
+    // Se for UUID ou não tiver storeId, carregar normalmente
+    if (isUUID || !storeId) {
+      // Marcar que estamos na página StoreOnline (loja individual)
+      sessionStorage.setItem('lastPageSource', 'store');
+      loadStoreOnline();
+      checkUser();
+    }
   }, [storeId]); // Recarregar quando o ID mudar
 
   const checkUser = async () => {
@@ -253,21 +299,55 @@ export default function StoreOnlineHome() {
         return;
       }
 
-      const [storeData, customizationsData] = await Promise.all([
-        Store.get(storeId).catch(() => null),
-        StoreCustomizations.getByStore(storeId).catch(() => null)
-      ]);
-
+      console.log('🔄 Carregando loja online, storeId:', storeId);
+      
+      // Buscar a loja primeiro para garantir que temos o ID real
+      const storeData = await Store.get(storeId).catch(() => null);
+      
       if (!storeData) {
         setError('Loja não encontrada');
         setLoading(false);
         return;
       }
       
+      // Usar o ID real da loja para buscar customizações
+      const actualStoreId = storeData.id;
+      console.log('✅ Loja encontrada, ID real:', actualStoreId);
+      
+      // Buscar customizações usando o ID real
+      const customizationsData = await StoreCustomizations.getByStore(actualStoreId).catch((error) => {
+        console.error('⚠️ Erro ao buscar customizações:', error);
+        return null;
+      });
+      
+      console.log('🎨 Customizações encontradas:', customizationsData ? 'Sim' : 'Não');
+      console.log('🎨 Detalhes das customizações:', customizationsData);
+      
       if (storeData.status !== "approved") {
         setError('Esta loja ainda não está disponível');
         setLoading(false);
         return;
+      }
+      
+      // Se a loja tem slug personalizado, ela DEVE mostrar a loja premium
+      // Isso garante que links personalizados sempre mostrem a loja premium
+      const hasSlug = storeData.slug && storeData.slug.trim() !== '';
+      const hasPremiumPlan = storeData.plan_id === 'plan-enterprise';
+      
+      console.log('🏪 Carregando loja premium:', {
+        storeId: storeData.id,
+        storeName: storeData.name,
+        hasSlug: hasSlug,
+        slug: storeData.slug,
+        hasPremiumPlan: hasPremiumPlan,
+        planId: storeData.plan_id,
+        hasCustomizations: !!customizationsData
+      });
+      
+      // Se tem slug mas não tem customizações, criar customizações padrão
+      // Isso garante que a loja premium sempre tenha customizações para exibir
+      if (hasSlug && !customizationsData) {
+        console.log('⚠️ Loja com slug mas sem customizações - usando padrões');
       }
       
       setStore(storeData);
@@ -292,6 +372,10 @@ export default function StoreOnlineHome() {
         text_color: '#1f2937',
         header_color: '#ffffff',
         footer_color: '#f9fafb',
+        categories_bar_color: '#f97316',
+        product_price_color: '#f97316',
+        product_button_color: '#f97316',
+        categories_card_bg_color: '#ffffff',
         banner_enabled: true,
         about_section_enabled: true,
         featured_section_enabled: true,
@@ -304,6 +388,13 @@ export default function StoreOnlineHome() {
         ...customizationsData
       };
       
+      console.log('🎨 Customizações finais aplicadas:', finalCustomizations);
+      console.log('🎨 Cores principais:', {
+        primary: finalCustomizations.primary_color,
+        secondary: finalCustomizations.secondary_color,
+        background: finalCustomizations.background_color
+      });
+      
       setCustomizations(finalCustomizations);
       
       const storeInfo = {
@@ -314,24 +405,28 @@ export default function StoreOnlineHome() {
         plan: storeData.plan_id,
       };
       
+      // Usar o ID real da loja (não o slug) para todas as operações
+      // actualStoreId já foi declarado acima na linha 266
+      
       // Salvar customizações no sessionStorage para aplicar em todas as páginas
       sessionStorage.setItem('storeOnlineCustomizations', JSON.stringify(finalCustomizations));
-      sessionStorage.setItem('storeOnlineStoreId', storeId);
+      sessionStorage.setItem('storeOnlineStoreId', actualStoreId);
       sessionStorage.setItem('storeOnlineStoreInfo', JSON.stringify(storeInfo));
       sessionStorage.setItem('isInStoreOnline', 'true');
       
       // Disparar evento para que Layout e outras páginas saibam que estamos na loja premium
       window.dispatchEvent(new CustomEvent('storeOnlineEntered', { 
-        detail: { customizations: finalCustomizations, storeId, store: storeInfo } 
+        detail: { customizations: finalCustomizations, storeId: actualStoreId, store: storeInfo } 
       }));
 
-      const storeProducts = await Product.filter({ store_id: storeId });
+      // Usar o ID real da loja (não o slug) para buscar produtos
+      const storeProducts = await Product.filter({ store_id: actualStoreId });
       let activeProducts = storeProducts.filter(p => 
         p.active === true || p.active === 1
       );
       
-      // Aplicar promoções aos produtos
-      activeProducts = await fetchAndApplyPromotions(activeProducts, storeId);
+      // Aplicar promoções aos produtos (usar ID real da loja)
+      activeProducts = await fetchAndApplyPromotions(activeProducts, actualStoreId);
       
       setProducts(activeProducts);
 
@@ -346,8 +441,17 @@ export default function StoreOnlineHome() {
     }
   };
 
+  // Função auxiliar para gerar link da loja (usa slug se disponível, senão ID)
+  const getStoreLink = (path = '') => {
+    if (store?.slug) {
+      return `/${store.slug}${path ? path : ''}`;
+    }
+    return `/loja-online/${store?.id || storeId}${path ? path : ''}`;
+  };
+
   const handleSearch = () => {
-    navigate(`/loja-online/${storeId}?view=products&search=${encodeURIComponent(searchTerm)}`);
+    const link = getStoreLink(`?view=products&search=${encodeURIComponent(searchTerm)}`);
+    navigate(link);
   };
 
   // Produtos em destaque (primeiros 8)
@@ -408,8 +512,12 @@ export default function StoreOnlineHome() {
     secondary: customizations.secondary_color || '#06b6d4',
     background: customizations.background_color || '#ffffff',
     text: customizations.text_color || '#1f2937',
-    header: customizations.header_color || '#ffffff',
+    header: customizations.header_color || '#1e3a8a',
+    categories_bar: customizations.categories_bar_color || '#f97316',
     footer: customizations.footer_color || '#f9fafb',
+    product_price: customizations.product_price_color || '#f97316',
+    product_button: customizations.product_button_color || '#f97316',
+    categories_card_bg: customizations.categories_card_bg_color || '#ffffff',
   };
 
   return (
@@ -520,7 +628,58 @@ export default function StoreOnlineHome() {
         </div>
       )}
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Seção de Benefícios - Abaixo do Banner */}
+      <div className="w-full bg-white border-b border-gray-200">
+        <div className="w-full px-12 sm:px-16 lg:px-20 py-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Anos no Mercado */}
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.primary + '20' }}>
+                <StoreIcon className="w-6 h-6" style={{ color: theme.primary }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">HÁ 20 ANOS</p>
+                <p className="text-xs text-gray-600">No Mercado</p>
+              </div>
+            </div>
+
+            {/* Frete Grátis */}
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.primary + '20' }}>
+                <Truck className="w-6 h-6" style={{ color: theme.primary }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">FRETE GRÁTIS</p>
+                <p className="text-xs text-gray-600">a partir de R$ 1.000,00</p>
+              </div>
+            </div>
+
+            {/* Desconto PIX */}
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.primary + '20' }}>
+                <Percent className="w-6 h-6" style={{ color: theme.primary }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">PAGUE COM DESCONTO</p>
+                <p className="text-xs text-gray-600">5% no PIX ou Transferência</p>
+              </div>
+            </div>
+
+            {/* Parcelamento */}
+            <div className="flex items-center gap-4">
+              <div className="flex-shrink-0 w-12 h-12 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.primary + '20' }}>
+                <CreditCard className="w-6 h-6" style={{ color: theme.primary }} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-900">PARCELE SEM JUROS</p>
+                <p className="text-xs text-gray-600">Em até 10 vezes</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="w-full px-12 sm:px-16 lg:px-20 py-8">
         {/* Seção Sobre */}
         {customizations.about_section_enabled && customizations.about_text && (
           <Card className="mb-12 shadow-sm" style={{ backgroundColor: theme.header }}>
@@ -534,23 +693,17 @@ export default function StoreOnlineHome() {
         {/* Produtos em Destaque */}
         {customizations.featured_section_enabled && featuredProducts.length > 0 && (
           <div className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold">Produtos em Destaque</h2>
-              <Link 
-                to={`/StoreOnline?id=${store.id}&view=products`}
-                className="text-lg font-medium flex items-center gap-2 hover:gap-3 transition-all"
-                style={{ color: theme.primary }}
-              >
-                Ver todos <ChevronRight className="w-5 h-5" />
-              </Link>
+            <div className="flex items-center justify-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900">PRODUTOS EM DESTAQUE</h2>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {featuredProducts.map(product => (
                 <ProductCard 
                   key={product.id} 
                   product={product} 
                   theme={theme} 
                   store={store}
+                  customizations={customizations}
                   onAddToCart={handleAddToCart}
                   user={user}
                   addingToCart={addingToCart}
@@ -563,26 +716,17 @@ export default function StoreOnlineHome() {
         {/* Mais Vendidos */}
         {bestSellers.length > 0 && (
           <div className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold flex items-center gap-3">
-                <Star className="w-8 h-8" style={{ color: theme.primary }} />
-                Mais Vendidos
-              </h2>
-              <Link 
-                to={`/StoreOnline?id=${store.id}&view=products`}
-                className="text-lg font-medium flex items-center gap-2 hover:gap-3 transition-all"
-                style={{ color: theme.primary }}
-              >
-                Ver todos <ChevronRight className="w-5 h-5" />
-              </Link>
+            <div className="flex items-center justify-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900">MAIS VENDIDOS</h2>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {bestSellers.map(product => (
                 <ProductCard 
                   key={product.id} 
                   product={product} 
                   theme={theme} 
                   store={store}
+                  customizations={customizations}
                   onAddToCart={handleAddToCart}
                   user={user}
                   addingToCart={addingToCart}
@@ -595,23 +739,17 @@ export default function StoreOnlineHome() {
         {/* Produtos Recentes */}
         {recentProducts.length > 0 && (
           <div className="mb-12">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold">Novidades</h2>
-              <Link 
-                to={`/StoreOnline?id=${store.id}&view=products`}
-                className="text-lg font-medium flex items-center gap-2 hover:gap-3 transition-all"
-                style={{ color: theme.primary }}
-              >
-                Ver todos <ChevronRight className="w-5 h-5" />
-              </Link>
+            <div className="flex items-center justify-center mb-8">
+              <h2 className="text-3xl font-bold text-gray-900">NOVIDADES</h2>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
               {recentProducts.map(product => (
                 <ProductCard 
                   key={product.id} 
                   product={product} 
                   theme={theme} 
                   store={store}
+                  customizations={customizations}
                   onAddToCart={handleAddToCart}
                   user={user}
                   addingToCart={addingToCart}

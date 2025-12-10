@@ -16,7 +16,7 @@ router.post('/connect', authenticateToken, requireRole('store', 'admin'), async 
     }
     
     // Verificar se a loja pertence ao usuário (ou se é admin)
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
+    const store = await db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
     }
@@ -54,7 +54,7 @@ router.post('/connect', authenticateToken, requireRole('store', 'admin'), async 
     
     values.push(store_id);
     
-    db.prepare(`
+    await db.prepare(`
       UPDATE stores 
       SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -71,11 +71,11 @@ router.post('/connect', authenticateToken, requireRole('store', 'admin'), async 
 });
 
 // Desconectar conta do Mercado Pago
-router.delete('/disconnect/:storeId', authenticateToken, requireRole('store', 'admin'), (req, res) => {
+router.delete('/disconnect/:storeId', authenticateToken, requireRole('store', 'admin'), async (req, res) => {
   try {
     const { storeId } = req.params;
     
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId);
+    const store = await db.prepare('SELECT * FROM stores WHERE id = ?').get(storeId);
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
     }
@@ -84,7 +84,7 @@ router.delete('/disconnect/:storeId', authenticateToken, requireRole('store', 'a
       return res.status(403).json({ error: 'Você não tem permissão para editar esta loja' });
     }
     
-    db.prepare(`
+    await db.prepare(`
       UPDATE stores 
       SET mercadopago_access_token = NULL, 
           mercadopago_public_key = NULL,
@@ -109,7 +109,7 @@ router.post('/payment/pix', authenticateToken, async (req, res) => {
     }
     
     // Buscar loja e credenciais do Mercado Pago
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
+    const store = await db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
     }
@@ -183,7 +183,7 @@ router.post('/payment/preference', authenticateToken, async (req, res) => {
     }
     
     // Buscar loja e credenciais do Mercado Pago
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
+    const store = await db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
     }
@@ -278,7 +278,7 @@ router.get('/payment/:paymentId', authenticateToken, async (req, res) => {
       return res.status(400).json({ error: 'store_id é obrigatório' });
     }
     
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
+    const store = await db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
     if (!store || !store.mercadopago_access_token) {
       return res.status(404).json({ error: 'Loja não encontrada ou sem conta do Mercado Pago' });
     }

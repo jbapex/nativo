@@ -80,13 +80,13 @@ export function applyPromotionsToProducts(products, promotions) {
     
     // Primeiro, tentar encontrar promoção específica do produto
     applicablePromo = promotions.find(p => 
-      p.product_id === product.id && p.active
+      (p.product_id === product.id || p.product_id === 'all') && p.active
     );
     
-    // Se não encontrar, buscar promoção geral (product_id NULL)
+    // Se não encontrar, buscar promoção geral (product_id NULL ou 'all')
     if (!applicablePromo) {
       applicablePromo = promotions.find(p => 
-        !p.product_id && p.active
+        (!p.product_id || p.product_id === 'all') && p.active
       );
     }
 
@@ -97,7 +97,11 @@ export function applyPromotionsToProducts(products, promotions) {
         ...product,
         price: promoPrice.finalPrice,
         compare_price: promoPrice.originalPrice,
-        promotion: applicablePromo,
+        promotion: {
+          ...applicablePromo,
+          // Temporizador sempre ativo - regra oficial
+          show_timer: true
+        },
         has_promotion: true,
         discount_percent: promoPrice.discountPercent
       };

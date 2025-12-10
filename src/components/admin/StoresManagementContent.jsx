@@ -159,7 +159,8 @@ export default function StoresManagementContent() {
         ...store,
         city_id: store.city_id || "",
         plan_id: planId || "none",
-        status: store.status || "pending" // Garantir que status está presente
+        status: store.status || "pending", // Garantir que status está presente
+        featured: store.featured || false // Incluir featured
       });
       setShowEditDialog(true);
       setError("");
@@ -170,7 +171,8 @@ export default function StoresManagementContent() {
         ...store,
         city_id: store.city_id || "",
         plan_id: store.plan_id || "none",
-        status: store.status || "pending" // Garantir que status está presente
+        status: store.status || "pending", // Garantir que status está presente
+        featured: store.featured || false // Incluir featured
       });
       setShowEditDialog(true);
       setError("");
@@ -197,7 +199,8 @@ export default function StoresManagementContent() {
         city_id: editingStore.city_id && editingStore.city_id !== "" ? editingStore.city_id : null,
         category_id: editingStore.category_id && editingStore.category_id !== "" ? editingStore.category_id : null,
         plan_id: planId && planId !== "none" && planId !== "" ? planId : null,
-        status: editingStore.status || 'pending' // Incluir status para aprovação/rejeição
+        status: editingStore.status || 'pending', // Incluir status para aprovação/rejeição
+        featured: editingStore.featured || false // Incluir featured para destaque
       };
       
       console.log('Atualizando loja com dados:', storeUpdateData);
@@ -717,13 +720,29 @@ export default function StoresManagementContent() {
                       <SelectItem value="none">Nenhum plano</SelectItem>
                       {plans.map((plan) => (
                         <SelectItem key={plan.id} value={plan.id}>
-                          {plan.name} - R$ {plan.price?.toFixed(2) || '0.00'}
+                          {plan.name} - R$ {typeof plan.price === 'number' ? plan.price.toFixed(2) : (parseFloat(plan.price) || 0).toFixed(2)}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-gray-500">
                     Ao selecionar um plano, uma assinatura será criada automaticamente quando a loja for aprovada.
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-2 p-3 border rounded-md bg-gray-50">
+                  <input
+                    type="checkbox"
+                    id="edit-featured"
+                    checked={editingStore.featured || false}
+                    onChange={(e) => setEditingStore({ ...editingStore, featured: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <Label htmlFor="edit-featured" className="cursor-pointer text-sm font-medium">
+                    Loja em Destaque
+                  </Label>
+                  <p className="text-xs text-gray-500 ml-2">
+                    (Aparece na seção "Lojas em Destaque" da página inicial)
                   </p>
                 </div>
               </div>

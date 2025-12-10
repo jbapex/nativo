@@ -4,14 +4,18 @@ import { z } from 'zod';
 export const productSchema = z.object({
   name: z.string().min(1, 'Nome é obrigatório').max(200, 'Nome muito longo'),
   description: z.string().max(5000, 'Descrição muito longa').optional(),
-  price: z.number().positive('Preço deve ser positivo').max(999999.99, 'Preço muito alto'),
-  compare_price: z.number().positive().max(999999.99).optional().nullable(),
+  price: z.number().positive('Preço deve ser positivo').max(999999999.99, 'Preço muito alto'),
+  compare_price: z.number().positive().max(999999999.99).optional().nullable(),
   category_id: z.string().uuid('ID de categoria inválido').optional().nullable(),
   tags: z.array(z.string()).optional(),
   stock: z.number().int().min(0).max(999999).optional().nullable(),
   active: z.boolean().optional(),
-  images: z.array(z.string().url('URL de imagem inválida')).optional(),
-});
+  images: z.array(z.string()).optional(), // Removido .url() para permitir URLs relativas ou diferentes formatos
+  technical_specs: z.string().optional().nullable(),
+  included_items: z.string().optional().nullable(),
+  warranty_info: z.string().optional().nullable(),
+  attributes: z.union([z.string(), z.object({}).passthrough(), z.record(z.any())]).optional().nullable(), // Permite objeto, string JSON, etc
+}).passthrough(); // Permite campos adicionais que não estão no schema
 
 export const userSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -52,12 +56,16 @@ export function validate(schema) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           error: 'Dados inválidos',
-          details: error.errors.map(err => ({
-            field: err.path.join('.'),
-            message: err.message
+          details: (error.errors || []).map(err => ({
+            field: (err.path || []).join('.'),
+            message: err.message || 'Campo inválido'
           }))
         });
       }
+      // Log do erro para debug
+      console.error('Erro na validação:', error);
+      console.error('Tipo do erro:', error?.constructor?.name);
+      console.error('Stack:', error?.stack);
       next(error);
     }
   };

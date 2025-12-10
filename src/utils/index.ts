@@ -52,7 +52,11 @@ export function createPageUrl(pageName: string) {
         'AdminProducts': '/admin/produtos',
         'AdminPlans': '/admin/planos',
         'AdminSubscriptions': '/admin/assinaturas',
-        'AdminSettings': '/admin/configuracoes'
+        'AdminCampaigns': '/admin/campanhas',
+        'AdminSettings': '/admin/configuracoes',
+        'PrivacyPolicy': '/politica-privacidade',
+        'TermsConditions': '/termos-condicoes',
+        'HelpFAQ': '/ajuda'
     };
     
     return routeMap[pageName] || '/' + pageName.toLowerCase().replace(/ /g, '-');

@@ -314,11 +314,11 @@ export default function StoreSignup() {
                   };
                   
                   return (
-                    <motion.div
-                      key={plan.id}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: index * 0.1 }}
+                <motion.div
+                  key={plan.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
                       whileHover={{ y: -5, transition: { duration: 0.2 } }}
                       className="h-full"
                     >
@@ -345,7 +345,7 @@ export default function StoreSignup() {
                             <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-0.5 rounded-full text-[10px] font-semibold shadow-lg flex items-center gap-1">
                               <Crown className="w-2.5 h-2.5" />
                               Recomendado
-                            </span>
+                      </span>
                           </div>
                         )}
                         
@@ -369,8 +369,8 @@ export default function StoreSignup() {
                                 <CardTitle className={`text-xl font-bold ${
                                   isPopular || isPremium ? 'text-white' : ''
                                 }`}>
-                                  {plan.name}
-                                </CardTitle>
+                        {plan.name}
+                      </CardTitle>
                                 <CardDescription className={`text-xs mt-0.5 ${
                                   isPopular || isPremium ? 'text-white/90' : ''
                                 }`}>
@@ -390,8 +390,8 @@ export default function StoreSignup() {
                                 }`}>
                                   Grátis
                                 </span>
-                              ) : (
-                                <>
+                        ) : (
+                          <>
                                   <span className={`text-xs font-medium ${
                                     isPopular || isPremium ? 'text-white/80' : 'text-gray-500'
                                   }`}>
@@ -401,18 +401,18 @@ export default function StoreSignup() {
                                     isPopular || isPremium ? 'text-white' : 'text-gray-900'
                                   }`}>
                                     {parseFloat(plan.price).toFixed(2).replace('.', ',')}
-                                  </span>
+                            </span>
                                   <span className={`text-sm font-medium ${
                                     isPopular || isPremium ? 'text-white/80' : 'text-gray-500'
                                   }`}>
-                                    /mês
+                            /mês
                                   </span>
-                                </>
-                              )}
+                          </>
+                        )}
                             </div>
                           </div>
-                        </CardHeader>
-                        
+                    </CardHeader>
+                    
                         <CardContent className="pt-4 space-y-4">
                           {displayFeatures.length > 0 ? (
                             <ul className="space-y-2">
@@ -426,14 +426,14 @@ export default function StoreSignup() {
                                   <span className="text-gray-700 leading-relaxed">
                                     {typeof feature === 'string' ? feature : JSON.stringify(feature)}
                                   </span>
-                                </li>
-                              ))}
-                            </ul>
+                          </li>
+                        ))}
+                      </ul>
                           ) : (
                             <p className="text-xs text-gray-500">Sem recursos especificados</p>
                           )}
-                          
-                          <Button 
+                      
+                      <Button 
                             className={`w-full h-10 text-sm font-semibold transition-all duration-200 text-white shadow-md hover:shadow-lg ${
                               isPremium
                                 ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
@@ -443,16 +443,16 @@ export default function StoreSignup() {
                                 ? 'bg-gradient-to-r from-gray-400 to-gray-500 hover:from-gray-500 hover:to-gray-600'
                                 : 'bg-gradient-to-r from-blue-400 to-blue-600 hover:from-blue-500 hover:to-blue-700'
                             }`}
-                            onClick={() => handlePlanSelect(plan)}
-                          >
+                        onClick={() => handlePlanSelect(plan)}
+                      >
                             {isPopular || isPremium ? 'Escolher Este Plano' : 'Escolher Plano'}
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    </motion.div>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </motion.div>
                   );
                 })}
-              </div>
+            </div>
             )}
           </TabsContent>
 

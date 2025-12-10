@@ -60,8 +60,9 @@ export default function AdminSubscriptions() {
           console.error("Erro ao carregar assinaturas:", err);
           throw new Error(`Erro ao carregar assinaturas: ${err.message}`);
         }),
-        User.filter({ role: "store" }).catch(err => {
-          console.error("Erro ao carregar usuários lojistas:", err);
+        // Usar StoreEntity.list() em vez de User.filter() pois não há rota de usuários com filtro por role
+        StoreEntity.list().catch(err => {
+          console.error("Erro ao carregar lojas:", err);
           return [];
         }),
         Plan.list().catch(err => {
@@ -101,7 +102,7 @@ export default function AdminSubscriptions() {
           store_logo: store.store_logo || store.logo,
           plan_name: plan.name || "Plano desconhecido",
           plan_slug: plan.slug || "unknown",
-          plan_price: plan.price || 0
+          plan_price: Number(plan.price) || 0 // Converter para número
         };
       });
 
@@ -148,7 +149,7 @@ export default function AdminSubscriptions() {
       payment_method: subscription.payment_method || "credit_card",
       auto_renew: subscription.auto_renew !== false,
       billing_cycle: subscription.billing_cycle || "monthly",
-      price_paid: subscription.price_paid || subscription.plan_price || 0,
+      price_paid: Number(subscription.price_paid) || Number(subscription.plan_price) || 0, // Converter para número
       subscription_notes: subscription.subscription_notes || ""
     });
     setShowEditDialog(true);
@@ -164,9 +165,11 @@ export default function AdminSubscriptions() {
       const selectedPlan = plans.find(p => p.id === formData.plan_id);
       
       if (!formData.price_paid && selectedPlan) {
+        const planPrice = Number(selectedPlan.price) || 0;
+        const yearlyPrice = Number(selectedPlan.yearly_price) || 0;
         formData.price_paid = formData.billing_cycle === "yearly" 
-          ? (selectedPlan.yearly_price || selectedPlan.price * 10) 
-          : selectedPlan.price;
+          ? (yearlyPrice || planPrice * 10) 
+          : planPrice;
       }
       
       const subscriptionData = {
@@ -202,7 +205,7 @@ export default function AdminSubscriptions() {
     const selectedPlan = plans.find(p => p.id === value);
     let endDate = "";
     
-    if (selectedPlan && selectedPlan.price > 0) {
+    if (selectedPlan && Number(selectedPlan.price) > 0) {
       const startDate = new Date(formData.start_date);
       const monthsToAdd = formData.billing_cycle === "yearly" ? 12 : 1;
       endDate = new Date(startDate.setMonth(startDate.getMonth() + monthsToAdd)).toISOString().split('T')[0];
@@ -211,7 +214,7 @@ export default function AdminSubscriptions() {
     setFormData({
       ...formData,
       plan_id: value,
-      price_paid: selectedPlan?.price || 0,
+      price_paid: Number(selectedPlan?.price) || 0, // Converter para número
       end_date: endDate 
     });
   };
@@ -265,15 +268,22 @@ export default function AdminSubscriptions() {
   };
 
   const getPlanBadge = (planSlug) => {
-    switch (planSlug) {
+    const normalized = (planSlug || "").toLowerCase();
+    switch (normalized) {
       case "free":
         return <Badge variant="outline">Gratuito</Badge>;
       case "standard":
         return <Badge className="bg-blue-100 text-blue-800">Standard</Badge>;
       case "premium":
+      case "plan-premium":
+      case "premium-plan":
         return <Badge className="bg-purple-100 text-purple-800">Premium</Badge>;
       default:
-        return <Badge variant="secondary">Desconhecido</Badge>;
+        return planSlug ? (
+          <Badge variant="secondary">{planSlug}</Badge>
+        ) : (
+          <Badge variant="secondary">Personalizado</Badge>
+        );
     }
   };
 
@@ -468,7 +478,11 @@ export default function AdminSubscriptions() {
                           <span className="text-green-600 font-medium">Grátis</span>
                         ) : (
                           <div className="text-sm">
-                            <div className="font-medium">R$ {subscription.price_paid?.toFixed(2) || subscription.plan_price?.toFixed(2) || "0.00"}</div>
+                            <div className="font-medium">
+                              R$ {
+                                (Number(subscription.price_paid) || Number(subscription.plan_price) || 0).toFixed(2)
+                              }
+                            </div>
                             <Badge variant="outline" className="text-xs">
                               {subscription.billing_cycle === "yearly" ? "Anual" : "Mensal"}
                             </Badge>
@@ -557,11 +571,14 @@ export default function AdminSubscriptions() {
                   <SelectValue placeholder="Selecione um plano" />
                 </SelectTrigger>
                 <SelectContent>
-                  {plans.map((plan) => (
-                    <SelectItem key={plan.id} value={plan.id}>
-                      {plan.name} - {plan.price === 0 ? "Grátis" : `R$ ${plan.price.toFixed(2)}`}
-                    </SelectItem>
-                  ))}
+                  {plans.map((plan) => {
+                    const planPrice = Number(plan.price) || 0;
+                    return (
+                      <SelectItem key={plan.id} value={plan.id}>
+                        {plan.name} - {planPrice === 0 ? "Grátis" : `R$ ${planPrice.toFixed(2)}`}
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -577,7 +594,7 @@ export default function AdminSubscriptions() {
                     const selectedPlan = plans.find(p => p.id === formData.plan_id);
                     let newEndDate = formData.end_date;
 
-                    if (selectedPlan && selectedPlan.price > 0) {
+                    if (selectedPlan && Number(selectedPlan.price) > 0) {
                       const startDate = new Date(newStartDate);
                       const monthsToAdd = formData.billing_cycle === "yearly" ? 12 : 1;
                       newEndDate = new Date(startDate.setMonth(startDate.getMonth() + monthsToAdd))
@@ -638,15 +655,17 @@ export default function AdminSubscriptions() {
                     let newPrice = 0;
                     
                     if (selectedPlan) {
+                      const planPrice = Number(selectedPlan.price) || 0;
+                      const yearlyPrice = Number(selectedPlan.yearly_price) || 0;
                       newPrice = value === "yearly" 
-                        ? (selectedPlan.yearly_price || selectedPlan.price * 10) 
-                        : selectedPlan.price;
+                        ? (yearlyPrice || planPrice * 10) 
+                        : planPrice;
                     }
                     
                     setFormData({
                       ...formData, 
                       billing_cycle: value,
-                      price_paid: newPrice
+                      price_paid: Number(newPrice) // Garantir que é número
                     });
                   }}
                 >

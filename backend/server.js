@@ -9,6 +9,8 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { initDatabase } from './database/db.js';
 import { createLogger } from './utils/logger.js';
+import { initSentry, sentryErrorHandler, sentryTransactionHandler } from './utils/sentry.js';
+import { startHealthCheckMonitoring, checkDatabaseHealth, getDbHealthStatus } from './utils/dbHealth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -25,16 +27,22 @@ import settingsRoutes from './routes/settings.js';
 import uploadRoutes from './routes/upload.js';
 import storeCustomizationsRoutes from './routes/storeCustomizations.js';
 import promotionsRoutes from './routes/promotions.js';
+import marketplaceCampaignsRoutes from './routes/marketplaceCampaigns.js';
+import campaignParticipationsRoutes from './routes/campaignParticipations.js';
 import ordersRoutes from './routes/orders.js';
 import cartRoutes from './routes/cart.js';
 import reviewsRoutes from './routes/reviews.js';
 import favoritesRoutes from './routes/favorites.js';
 import notificationsRoutes from './routes/notifications.js';
+import categoryAttributesRoutes from './routes/categoryAttributes.js';
 import mercadopagoRoutes from './routes/mercadopago.js';
 import paymentsRoutes from './routes/payments.js';
 import userAddressesRoutes from './routes/user-addresses.js';
 
 dotenv.config();
+
+// Inicializar Sentry (ANTES de qualquer outra coisa)
+initSentry();
 
 // Logger
 const logger = createLogger();
@@ -110,11 +118,23 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // Rate Limiting mais restritivo para autenticação
+// Mais permissivo em desenvolvimento para facilitar testes
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 5, // 5 tentativas de login por IP
-  message: { error: 'Muitas tentativas de login. Tente novamente em 15 minutos.' },
+  windowMs: isDevelopment 
+    ? parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 5 * 60 * 1000 // 5 minutos em desenvolvimento
+    : parseInt(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutos em produção
+  max: isDevelopment
+    ? parseInt(process.env.AUTH_RATE_LIMIT_MAX) || 20 // 20 tentativas em desenvolvimento
+    : parseInt(process.env.AUTH_RATE_LIMIT_MAX) || 5, // 5 tentativas em produção
+  message: { 
+    error: isDevelopment 
+      ? 'Muitas tentativas de login. Tente novamente em alguns minutos.' 
+      : 'Muitas tentativas de login. Tente novamente em 15 minutos.' 
+  },
   skipSuccessfulRequests: true,
+  // Em desenvolvimento, permitir resetar o rate limit mais facilmente
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 // Body Parser
@@ -123,11 +143,46 @@ const authLimiter = rateLimit({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Inicializar banco de dados
-initDatabase().catch(console.error);
+// Inicializar banco de dados ANTES de iniciar o servidor
+let dbInitialized = false;
+
+async function startServer() {
+  try {
+    logger.info('🔄 Inicializando banco de dados...');
+    await initDatabase();
+    
+    // Verificar saúde do banco após inicialização
+    const health = await checkDatabaseHealth();
+    if (!health.healthy) {
+      logger.error('❌ Banco de dados não está saudável após inicialização');
+      throw new Error('Falha na verificação de saúde do banco de dados');
+    }
+    
+    logger.info('✅ Banco de dados inicializado e saudável');
+    
+    // Iniciar monitoramento periódico do banco
+    startHealthCheckMonitoring(30000); // Verificar a cada 30 segundos
+    
+    dbInitialized = true;
+  } catch (error) {
+    logger.error('❌ Erro ao inicializar banco de dados:', error);
+    process.exit(1);
+  }
+  
+  app.listen(PORT, () => {
+    logger.info(`🚀 Servidor rodando na porta ${PORT}`);
+    logger.info(`📡 API disponível em http://localhost:${PORT}/api`);
+    logger.info(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+  });
+}
+
+startServer();
 
 // Rotas de arquivos estáticos (ANTES do rate limiting)
 app.use('/api/upload/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Sentry Transaction Handler (para rastrear performance)
+app.use(sentryTransactionHandler);
 
 // Rotas
 app.use('/api/auth', authLimiter, authRoutes);
@@ -141,41 +196,76 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/store-customizations', storeCustomizationsRoutes);
 app.use('/api/promotions', promotionsRoutes);
+app.use('/api/marketplace-campaigns', marketplaceCampaignsRoutes);
+app.use('/api/campaign-participations', campaignParticipationsRoutes);
 app.use('/api/orders', ordersRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/reviews', reviewsRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/category-attributes', categoryAttributesRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/mercadopago', mercadopagoRoutes);
 app.use('/api/user-addresses', userAddressesRoutes);
 
-// Rota de health check
+// Rota de health check geral
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'API funcionando' });
 });
 
-// Middleware de erro
+// Health Check do Banco de Dados
+app.get('/api/health/db', async (req, res) => {
+  try {
+    const health = await checkDatabaseHealth();
+    const status = getDbHealthStatus();
+    
+    res.status(health.healthy ? 200 : 503).json({
+      ...health,
+      statistics: status,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    res.status(503).json({ 
+      healthy: false, 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Middleware de erro (Sentry primeiro, depois logger)
+app.use(sentryErrorHandler);
+
+// Middleware de erro (tratamento final)
 app.use((err, req, res, next) => {
+  // Log do erro
   logger.error('Erro não tratado:', {
     error: err.message,
     stack: err.stack,
     path: req.path,
     method: req.method,
-    ip: req.ip
+    ip: req.ip,
+    params: req.params,
+    query: req.query
   });
   
   // Não expor detalhes do erro em produção
   const isDevelopment = process.env.NODE_ENV !== 'production';
-  res.status(err.status || 500).json({
-    error: isDevelopment ? err.message : 'Erro interno do servidor',
-    ...(isDevelopment && { stack: err.stack })
-  });
-});
-
-app.listen(PORT, () => {
-  logger.info(`🚀 Servidor rodando na porta ${PORT}`);
-  logger.info(`📡 API disponível em http://localhost:${PORT}/api`);
-  logger.info(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Se for erro de UUID inválido, retornar erro mais amigável
+  if (err.code === '22P02' || err.message?.includes('invalid input syntax for type uuid')) {
+    return res.status(400).json({
+      error: 'ID inválido',
+      message: 'O ID fornecido não é válido'
+    });
+  }
+  
+  // Sempre retornar resposta para não deixar requisição pendente
+  if (!res.headersSent) {
+    res.status(err.status || 500).json({
+      error: isDevelopment ? err.message : 'Erro interno do servidor',
+      ...(isDevelopment && { stack: err.stack })
+    });
+  }
 });
 

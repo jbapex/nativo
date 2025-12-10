@@ -3,6 +3,18 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+// Verificar saúde do banco antes de requisições críticas
+async function checkDatabaseHealth() {
+  try {
+    const response = await fetch(`${API_BASE_URL}/health/db`);
+    const health = await response.json();
+    return health.healthy === true;
+  } catch (error) {
+    console.warn('⚠️ Não foi possível verificar saúde do banco:', error);
+    return false; // Em caso de erro, assumir que está OK para não bloquear
+  }
+}
+
 // Função auxiliar para fazer requisições
 async function request(endpoint, options = {}) {
   const token = localStorage.getItem('auth_token');
@@ -18,6 +30,15 @@ async function request(endpoint, options = {}) {
 
   let response;
   try {
+    // Para operações críticas (POST, PUT, DELETE), verificar saúde do banco
+    const isCriticalOperation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method);
+    if (isCriticalOperation) {
+      const dbHealthy = await checkDatabaseHealth();
+      if (!dbHealthy) {
+        throw new Error('Banco de dados não está disponível no momento. Tente novamente em alguns instantes.');
+      }
+    }
+    
     response = await fetch(`${API_BASE_URL}${endpoint}`, config);
   } catch (fetchError) {
     console.error('Erro na requisição fetch:', fetchError);
@@ -27,12 +48,72 @@ async function request(endpoint, options = {}) {
   }
   
   if (!response.ok) {
-    // Para 401, não redirecionar - apenas lançar erro silenciosamente
+    // Para 401, tentar renovar token usando refresh token antes de deslogar
     if (response.status === 401) {
-      const error = await response.json().catch(() => ({ error: 'Não autenticado' }));
-      const err = new Error(error.error || 'Não autenticado');
-      err.status = 401;
+      const refreshToken = localStorage.getItem('refresh_token');
+      
+      // Se tiver refresh token, tentar renovar
+      if (refreshToken && token) {
+        try {
+          console.log('🔄 Token expirado, tentando renovar com refresh token...');
+          const refreshResponse = await fetch(`${API_BASE_URL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refreshToken })
+          });
+          
+          if (refreshResponse.ok) {
+            const refreshData = await refreshResponse.json();
+            if (refreshData.token) {
+              console.log('✅ Token renovado com sucesso');
+              localStorage.setItem('auth_token', refreshData.token);
+              
+              // Tentar a requisição original novamente com o novo token
+              const retryConfig = {
+                ...options,
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${refreshData.token}`,
+                  ...options.headers,
+                },
+              };
+              
+              const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, retryConfig);
+              
+              if (retryResponse.ok) {
+                return await retryResponse.json();
+              }
+              
+              // Se ainda der erro após renovar, continuar com o tratamento normal
+            }
+          } else {
+            console.log('⚠️ Não foi possível renovar token, refresh token pode estar inválido');
+          }
+        } catch (refreshError) {
+          console.error('❌ Erro ao tentar renovar token:', refreshError);
+          // Continuar com o tratamento normal se falhar
+        }
+      }
+      
+      // Se não conseguiu renovar ou não tem refresh token, limpar tokens
+      if (token) {
+        console.log('⚠️ Removendo tokens inválidos');
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('refresh_token');
+      }
+      
+      const error = await response.json().catch(() => ({ error: 'Token inválido ou expirado' }));
+      const err = new Error(error.error || 'Token inválido ou expirado');
+      err.status = response.status;
       err.silent = true; // Marcar como silencioso para não logar no console
+      throw err;
+    }
+    
+    // Para 403, não remover token automaticamente (pode ser apenas falta de permissão)
+    if (response.status === 403) {
+      const error = await response.json().catch(() => ({ error: 'Acesso negado' }));
+      const err = new Error(error.error || 'Acesso negado');
+      err.status = response.status;
       throw err;
     }
     
@@ -45,6 +126,7 @@ async function request(endpoint, options = {}) {
     
     const err = new Error(errorData.error || errorData.details || `HTTP ${response.status}`);
     err.status = response.status;
+    err.response = { data: errorData }; // Adicionar response para compatibilidade
     err.details = errorData; // Preservar todos os detalhes do erro, incluindo debug
     throw err;
   }
@@ -71,9 +153,12 @@ export const Auth = {
       body: JSON.stringify({ email, password }),
     });
     
-    // Salvar token
+    // Salvar tokens
     if (data.token) {
       localStorage.setItem('auth_token', data.token);
+    }
+    if (data.refreshToken) {
+      localStorage.setItem('refresh_token', data.refreshToken);
     }
     
     return data.user;
@@ -86,8 +171,12 @@ export const Auth = {
       body: JSON.stringify({ email, password, full_name, phone, role }),
     });
     
+    // Salvar tokens
     if (data.token) {
       localStorage.setItem('auth_token', data.token);
+    }
+    if (data.refreshToken) {
+      localStorage.setItem('refresh_token', data.refreshToken);
     }
     
     return data.user;
@@ -121,9 +210,12 @@ export const Auth = {
       body: JSON.stringify({ token: googleToken }),
     });
     
-    // Salvar token
+    // Salvar tokens
     if (data.token) {
       localStorage.setItem('auth_token', data.token);
+    }
+    if (data.refreshToken) {
+      localStorage.setItem('refresh_token', data.refreshToken);
     }
     
     return data.user;
@@ -131,8 +223,21 @@ export const Auth = {
 
   // Logout
   async logout() {
+    const refreshToken = localStorage.getItem('refresh_token');
     localStorage.removeItem('auth_token');
-    return request('/auth/logout', { method: 'POST' });
+    localStorage.removeItem('refresh_token');
+    
+    // Enviar refresh token para revogar no servidor
+    if (refreshToken) {
+      try {
+        await request('/auth/logout', { 
+          method: 'POST',
+          body: JSON.stringify({ refreshToken })
+        });
+      } catch (error) {
+        // Ignorar erros no logout (pode já estar deslogado)
+      }
+    }
   },
 
   // Filtrar usuários (admin apenas)
@@ -200,25 +305,50 @@ class EntityClient {
     });
   }
 
+  // Deletar em massa
+  async deleteBulk(ids) {
+    return request(`/${this.entityName}/bulk`, {
+      method: 'DELETE',
+      body: JSON.stringify({ ids }),
+    });
+  }
+
   // Filtrar
   async filter(filters = {}, orderBy, limit) {
-    const params = new URLSearchParams();
-    params.append('page', '1'); // Adicionar paginação
-    Object.entries(filters).forEach(([key, value]) => {
-      params.append(key, value);
-    });
-    if (orderBy) params.append('order_by', orderBy);
-    if (limit) params.append('limit', limit);
-    
-    const response = await request(`/${this.entityName}?${params.toString()}`);
-    
-    // Se a resposta tem estrutura de paginação, extrair data
-    if (response && typeof response === 'object' && 'data' in response && 'pagination' in response) {
-      return response.data;
+    try {
+      const params = new URLSearchParams();
+      params.append('page', '1'); // Adicionar paginação
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined) {
+          params.append(key, value);
+        }
+      });
+      if (orderBy) params.append('order_by', orderBy);
+      if (limit) params.append('limit', limit);
+      
+      const url = `/${this.entityName}?${params.toString()}`;
+      console.log(`🔍 [${this.entityName}] Fazendo requisição:`, url);
+      
+      const response = await request(url);
+      
+      console.log(`✅ [${this.entityName}] Resposta recebida:`, {
+        hasData: !!response,
+        isArray: Array.isArray(response),
+        hasPagination: response && typeof response === 'object' && 'data' in response,
+        dataLength: Array.isArray(response) ? response.length : (response?.data?.length || 0)
+      });
+      
+      // Se a resposta tem estrutura de paginação, extrair data
+      if (response && typeof response === 'object' && 'data' in response && 'pagination' in response) {
+        return response.data;
+      }
+      
+      // Fallback para compatibilidade com rotas sem paginação
+      return response;
+    } catch (error) {
+      console.error(`❌ [${this.entityName}] Erro no filter:`, error);
+      throw error;
     }
-    
-    // Fallback para compatibilidade com rotas sem paginação
-    return response;
   }
 }
 
@@ -250,6 +380,27 @@ Product.incrementMetric = async function(productId, metricType, viewSource = nul
 };
 export const Category = new EntityClient('categories');
 export const Store = new EntityClient('stores');
+
+// Adicionar método getBySlug para Store
+Store.getBySlug = async function(slug) {
+  return request(`/stores/slug/${slug}`);
+};
+
+// Adicionar método getStats para Store
+Store.getStats = async function(storeId, options = {}) {
+  const params = new URLSearchParams();
+  if (options.period) {
+    params.append('period', options.period);
+  }
+  if (options.start_date) {
+    params.append('start_date', options.start_date);
+  }
+  if (options.end_date) {
+    params.append('end_date', options.end_date);
+  }
+  const queryString = params.toString();
+  return request(`/stores/${storeId}/stats${queryString ? `?${queryString}` : ''}`);
+};
 export const City = new EntityClient('cities');
 export const Plan = new EntityClient('plans');
 export const Subscription = new EntityClient('subscriptions');
@@ -352,6 +503,153 @@ export const Promotions = {
     return request(`/promotions/${id}`, {
       method: 'DELETE',
     });
+  },
+};
+
+// Atributos de categoria (para filtros e formulários dinâmicos)
+export const CategoryAttributes = {
+  // Listar todos os atributos de uma categoria
+  async listByCategory(categoryId) {
+    return request(`/category-attributes/category/${categoryId}`);
+  },
+
+  // Listar apenas atributos marcados como filtráveis (para sidebar de filtros)
+  async listFilterableByCategory(categoryId) {
+    return request(`/category-attributes/category/${categoryId}/filterable`);
+  },
+
+  // Operações administrativas (usadas em futuras telas do admin)
+  async create(data) {
+    return request('/category-attributes', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async update(id, data) {
+    return request(`/category-attributes/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async remove(id) {
+    return request(`/category-attributes/${id}`, {
+      method: 'DELETE',
+    });
+  },
+};
+
+// Cliente de Campanhas do Marketplace
+export const MarketplaceCampaigns = {
+  // Listar campanhas ativas (público - não requer autenticação)
+  async getActive() {
+    try {
+      return await request('/marketplace-campaigns/active');
+    } catch (error) {
+      // Se for erro de autenticação (401/403), tentar sem token (rota pública)
+      if (error.status === 401 || error.status === 403) {
+        const response = await fetch(`${API_BASE_URL}/marketplace-campaigns/active`, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        if (response.ok) {
+          return await response.json();
+        }
+      }
+      // Se não for erro de auth ou se a requisição sem token também falhar, lançar erro
+      throw error;
+    }
+  },
+
+  // Listar todas as campanhas (admin)
+  async list() {
+    return request('/marketplace-campaigns');
+  },
+
+  // Obter campanha específica
+  async get(id) {
+    return request(`/marketplace-campaigns/${id}`);
+  },
+
+  // Criar campanha (admin)
+  async create(campaign) {
+    return request('/marketplace-campaigns', {
+      method: 'POST',
+      body: JSON.stringify(campaign),
+    });
+  },
+
+  // Atualizar campanha (admin)
+  async update(id, campaign) {
+    return request(`/marketplace-campaigns/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(campaign),
+    });
+  },
+
+  // Deletar campanha (admin)
+  async delete(id) {
+    return request(`/marketplace-campaigns/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Listar participações de uma campanha (requer autenticação)
+  async getParticipations(campaignId) {
+    return request(`/marketplace-campaigns/${campaignId}/participations`);
+  },
+
+  // Listar participações aprovadas de uma campanha (público - não requer autenticação)
+  async getPublicParticipations(campaignId) {
+    try {
+      return await request(`/marketplace-campaigns/${campaignId}/participations/public`);
+    } catch (error) {
+      // Se for erro de autenticação (401/403), tentar sem token (rota pública)
+      if (error.status === 401 || error.status === 403) {
+        const response = await fetch(`${API_BASE_URL}/marketplace-campaigns/${campaignId}/participations/public`, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        });
+        if (response.ok) {
+          return await response.json();
+        }
+      }
+      throw error;
+    }
+  },
+};
+
+// Cliente de Participações em Campanhas
+export const CampaignParticipations = {
+  // Participar de uma campanha (lojista)
+  async participate(data) {
+    return request('/campaign-participations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  // Remover participação (lojista)
+  async remove(id) {
+    return request(`/campaign-participations/${id}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Aprovar/Rejeitar participação (admin)
+  async updateStatus(id, status) {
+    return request(`/campaign-participations/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  // Listar campanhas disponíveis para participação (lojista)
+  async getAvailable() {
+    return request('/campaign-participations/available');
   },
 };
 

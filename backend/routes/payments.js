@@ -4,10 +4,9 @@ import { db } from '../database/db.js';
 import { authenticateToken, requireRole } from '../middleware/auth.js';
 import { sanitizeBody } from '../middleware/validation.js';
 import { v4 as uuidv4 } from 'uuid';
-import { 
+import {
   getMercadoPagoClient, 
   storeAcceptsMercadoPago, 
-  createPreference, 
   getPayment, 
   cancelPayment 
 } from '../utils/mercadopago.js';
@@ -26,14 +25,14 @@ router.post('/create-preference', authenticateToken, sanitizeBody, async (req, r
     }
 
     // Verificar se loja aceita Mercado Pago
-    if (!storeAcceptsMercadoPago(store_id)) {
+    if (!await storeAcceptsMercadoPago(store_id)) {
       return res.status(400).json({ 
         error: 'Esta loja não aceita pagamento via Mercado Pago ou não possui credenciais configuradas' 
       });
     }
 
     // Buscar pedido
-    const order = db.prepare(`
+    const order = await db.prepare(`
       SELECT o.*, u.email, u.full_name, u.phone
       FROM orders o
       JOIN users u ON o.user_id = u.id
@@ -45,7 +44,7 @@ router.post('/create-preference', authenticateToken, sanitizeBody, async (req, r
     }
 
     // Buscar itens do pedido
-    const orderItems = db.prepare(`
+    const orderItems = await db.prepare(`
       SELECT oi.*, p.name as product_name
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
@@ -57,7 +56,7 @@ router.post('/create-preference', authenticateToken, sanitizeBody, async (req, r
     }
 
     // Buscar loja
-    const store = db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
+    const store = await db.prepare('SELECT * FROM stores WHERE id = ?').get(store_id);
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
     }
@@ -148,7 +147,7 @@ router.post('/create-preference', authenticateToken, sanitizeBody, async (req, r
     console.log('Back URLs:', preferenceData.back_urls);
     console.log('Preference Data completo:', JSON.stringify(preferenceData, null, 2));
     
-    const client = getMercadoPagoClient(store_id);
+    const client = await getMercadoPagoClient(store_id);
     if (!client) {
       console.error('Cliente do Mercado Pago não encontrado para store_id:', store_id);
       return res.status(400).json({ 
@@ -167,7 +166,7 @@ router.post('/create-preference', authenticateToken, sanitizeBody, async (req, r
 
       // Criar registro de pagamento
       const paymentId = uuidv4();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO payments (
           id, order_id, status, payment_method, payment_type, 
           amount, currency, mp_preference_id, created_at, updated_at
@@ -184,7 +183,7 @@ router.post('/create-preference', authenticateToken, sanitizeBody, async (req, r
       );
 
       // Atualizar pedido com payment_id e mp_preference_id
-      db.prepare(`
+      await db.prepare(`
         UPDATE orders 
         SET payment_id = ?, mp_preference_id = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
@@ -329,7 +328,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       console.log('Full eventData:', JSON.stringify(eventData, null, 2));
 
       // Primeiro, tentar buscar pagamento no banco pelo mp_payment_id
-      let payment = db.prepare('SELECT * FROM payments WHERE mp_payment_id = ?').get(paymentId.toString());
+      let payment = await db.prepare('SELECT * FROM payments WHERE mp_payment_id = ?').get(paymentId.toString());
       console.log('Busca por mp_payment_id:', paymentId.toString(), '- Encontrado:', !!payment);
       
       let order = null;
@@ -337,7 +336,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       
       if (payment) {
         console.log('✅ Pagamento encontrado pelo mp_payment_id:', payment.id);
-        order = db.prepare('SELECT * FROM orders WHERE id = ?').get(payment.order_id);
+        order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(payment.order_id);
         if (order) {
           storeId = order.store_id;
         }
@@ -347,7 +346,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         console.log('⚠️ Pagamento não encontrado pelo mp_payment_id. Buscando em todas as lojas...');
         
         // Buscar todas as lojas com credenciais do Mercado Pago
-        const storesWithMP = db.prepare('SELECT id, mercadopago_access_token FROM stores WHERE mercadopago_access_token IS NOT NULL').all();
+        const storesWithMP = await db.prepare('SELECT id, mercadopago_access_token FROM stores WHERE mercadopago_access_token IS NOT NULL').all();
         console.log('Lojas com Mercado Pago configurado:', storesWithMP.length);
         
         // Tentar buscar o pagamento no Mercado Pago usando as credenciais de cada loja
@@ -363,22 +362,22 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
               
               // Tentar encontrar o pedido pelo preference_id
               if (paymentInfo.preference_id) {
-                order = db.prepare('SELECT * FROM orders WHERE mp_preference_id = ?').get(paymentInfo.preference_id);
+                order = await db.prepare('SELECT * FROM orders WHERE mp_preference_id = ?').get(paymentInfo.preference_id);
                 if (order) {
                   console.log('✅ Pedido encontrado pelo preference_id:', order.id);
                   storeId = store.id;
                   
                   // Buscar ou criar registro de pagamento
-                  payment = db.prepare('SELECT * FROM payments WHERE order_id = ?').get(order.id);
+                  payment = await db.prepare('SELECT * FROM payments WHERE order_id = ?').get(order.id);
                   if (!payment && order.payment_id) {
-                    payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(order.payment_id);
+                    payment = await db.prepare('SELECT * FROM payments WHERE id = ?').get(order.payment_id);
                   }
                   
                   if (!payment) {
                     // Criar novo registro de pagamento
                     const newPaymentId = uuidv4();
                     console.log('Criando novo registro de pagamento:', newPaymentId);
-                    db.prepare(`
+                    await db.prepare(`
                       INSERT INTO payments (
                         id, order_id, status, payment_method, payment_type, 
                         amount, currency, mp_preference_id, mp_payment_id, created_at, updated_at
@@ -392,8 +391,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                       paymentId.toString()
                     );
                     
-                    db.prepare('UPDATE orders SET payment_id = ? WHERE id = ?').run(newPaymentId, order.id);
-                    payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(newPaymentId);
+                    await db.prepare('UPDATE orders SET payment_id = ? WHERE id = ?').run(newPaymentId, order.id);
+                    payment = await db.prepare('SELECT * FROM payments WHERE id = ?').get(newPaymentId);
                   }
                   break; // Encontrou, sair do loop
                 }
@@ -401,20 +400,20 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
               
               // Tentar encontrar pelo order_id no metadata
               if (!order && paymentInfo.metadata && paymentInfo.metadata.order_id) {
-                order = db.prepare('SELECT * FROM orders WHERE id = ?').get(paymentInfo.metadata.order_id);
+                order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(paymentInfo.metadata.order_id);
                 if (order) {
                   console.log('✅ Pedido encontrado pelo metadata.order_id:', order.id);
                   storeId = store.id;
                   
                   // Buscar ou criar registro de pagamento
-                  payment = db.prepare('SELECT * FROM payments WHERE order_id = ?').get(order.id);
+                  payment = await db.prepare('SELECT * FROM payments WHERE order_id = ?').get(order.id);
                   if (!payment && order.payment_id) {
-                    payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(order.payment_id);
+                    payment = await db.prepare('SELECT * FROM payments WHERE id = ?').get(order.payment_id);
                   }
                   
                   if (!payment) {
                     const newPaymentId = uuidv4();
-                    db.prepare(`
+                    await db.prepare(`
                       INSERT INTO payments (
                         id, order_id, status, payment_method, payment_type, 
                         amount, currency, mp_preference_id, mp_payment_id, created_at, updated_at
@@ -428,8 +427,8 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
                       paymentId.toString()
                     );
                     
-                    db.prepare('UPDATE orders SET payment_id = ? WHERE id = ?').run(newPaymentId, order.id);
-                    payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(newPaymentId);
+                    await db.prepare('UPDATE orders SET payment_id = ? WHERE id = ?').run(newPaymentId, order.id);
+                    payment = await db.prepare('SELECT * FROM payments WHERE id = ?').get(newPaymentId);
                   }
                   break;
                 }
@@ -460,7 +459,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
       // Buscar informações atualizadas do pagamento no Mercado Pago
       try {
         // Verificar se a loja tem credenciais configuradas antes de tentar buscar
-        if (!storeAcceptsMercadoPago(finalStoreId)) {
+        if (!await storeAcceptsMercadoPago(finalStoreId)) {
           console.log('Loja não tem credenciais do Mercado Pago configuradas, pulando busca de informações');
           // Retornar OK mesmo sem buscar informações
           return res.status(200).send('OK');
@@ -499,7 +498,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         const paymentType = paymentInfo.payment_method_id || null;
 
         // Atualizar pagamento
-        db.prepare(`
+        await db.prepare(`
           UPDATE payments 
           SET status = ?, payment_type = ?, mp_payment_id = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
@@ -520,7 +519,7 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
           payment_status_mp: newStatus
         });
 
-        const updateResult = db.prepare(`
+        const updateResult = await db.prepare(`
           UPDATE orders 
           SET status = ?, payment_status = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
@@ -529,27 +528,33 @@ router.post('/webhook', express.raw({ type: 'application/json' }), async (req, r
         console.log('✅ Pedido atualizado. Linhas afetadas:', updateResult.changes);
         
         // Verificar se foi atualizado corretamente
-        const updatedOrder = db.prepare('SELECT status, payment_status FROM orders WHERE id = ?').get(payment.order_id);
+        const updatedOrder = await db.prepare('SELECT status, payment_status FROM orders WHERE id = ?').get(payment.order_id);
         console.log('✅ Status do pedido após atualização:', updatedOrder);
 
         // Criar notificações
         if (newStatus === 'approved') {
           // Notificar lojista
-          const store = db.prepare('SELECT user_id FROM stores WHERE id = ?').get(finalStoreId);
+          const store = await db.prepare('SELECT user_id FROM stores WHERE id = ?').get(finalStoreId);
           if (store) {
-            await createNotification(store.user_id, 'order_paid', {
-              order_id: payment.order_id,
-              message: `Novo pedido pago: #${payment.order_id.slice(0, 8).toUpperCase()}`
-            });
+            await createNotification(
+              store.user_id,
+              'order_paid',
+              'Novo Pedido Pago',
+              `Novo pedido pago: #${payment.order_id.slice(0, 8).toUpperCase()}`,
+              `/OrderDetail?id=${payment.order_id}`
+            );
           }
 
           // Notificar cliente
-          const orderData = db.prepare('SELECT user_id FROM orders WHERE id = ?').get(payment.order_id);
+          const orderData = await db.prepare('SELECT user_id FROM orders WHERE id = ?').get(payment.order_id);
           if (orderData) {
-            await createNotification(orderData.user_id, 'payment_approved', {
-              order_id: payment.order_id,
-              message: `Seu pagamento foi aprovado! Pedido #${payment.order_id.slice(0, 8).toUpperCase()}`
-            });
+            await createNotification(
+              orderData.user_id,
+              'payment_approved',
+              'Pagamento Aprovado',
+              `Seu pagamento foi aprovado! Pedido #${payment.order_id.slice(0, 8).toUpperCase()}`,
+              `/OrderDetail?id=${payment.order_id}`
+            );
           }
         }
 
@@ -590,13 +595,13 @@ router.get('/:paymentId/status', authenticateToken, async (req, res) => {
   try {
     const { paymentId } = req.params;
 
-    const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(paymentId);
+    const payment = await db.prepare('SELECT * FROM payments WHERE id = ?').get(paymentId);
     if (!payment) {
       return res.status(404).json({ error: 'Pagamento não encontrado' });
     }
 
     // Verificar se o usuário tem acesso a este pagamento
-    const order = db.prepare('SELECT user_id, store_id FROM orders WHERE id = ?').get(payment.order_id);
+    const order = await db.prepare('SELECT user_id, store_id FROM orders WHERE id = ?').get(payment.order_id);
     if (!order) {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
@@ -611,7 +616,7 @@ router.get('/:paymentId/status', authenticateToken, async (req, res) => {
 
     // Se tiver mp_payment_id, buscar informações atualizadas do Mercado Pago
     let mpPaymentInfo = null;
-    if (payment.mp_payment_id && storeAcceptsMercadoPago(order.store_id)) {
+    if (payment.mp_payment_id && await storeAcceptsMercadoPago(order.store_id)) {
       try {
         mpPaymentInfo = await getPayment(order.store_id, payment.mp_payment_id);
       } catch (error) {
@@ -644,18 +649,18 @@ router.post('/:paymentId/cancel', authenticateToken, async (req, res) => {
   try {
     const { paymentId } = req.params;
 
-    const payment = db.prepare('SELECT * FROM payments WHERE id = ?').get(paymentId);
+    const payment = await db.prepare('SELECT * FROM payments WHERE id = ?').get(paymentId);
     if (!payment) {
       return res.status(404).json({ error: 'Pagamento não encontrado' });
     }
 
     // Verificar se o usuário tem permissão (apenas lojista/admin)
-    const order = db.prepare('SELECT store_id FROM orders WHERE id = ?').get(payment.order_id);
+    const order = await db.prepare('SELECT store_id FROM orders WHERE id = ?').get(payment.order_id);
     if (!order) {
       return res.status(404).json({ error: 'Pedido não encontrado' });
     }
 
-    const store = db.prepare('SELECT user_id FROM stores WHERE id = ?').get(order.store_id);
+    const store = await db.prepare('SELECT user_id FROM stores WHERE id = ?').get(order.store_id);
     if (!store) {
       return res.status(404).json({ error: 'Loja não encontrada' });
     }
@@ -672,7 +677,7 @@ router.post('/:paymentId/cancel', authenticateToken, async (req, res) => {
     }
 
     // Se tiver mp_payment_id, cancelar no Mercado Pago
-    if (payment.mp_payment_id && storeAcceptsMercadoPago(order.store_id)) {
+    if (payment.mp_payment_id && await storeAcceptsMercadoPago(order.store_id)) {
       try {
         await cancelPayment(order.store_id, payment.mp_payment_id);
       } catch (error) {
@@ -682,14 +687,14 @@ router.post('/:paymentId/cancel', authenticateToken, async (req, res) => {
     }
 
     // Atualizar status no banco
-    db.prepare(`
+    await db.prepare(`
       UPDATE payments 
       SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(paymentId);
 
     // Atualizar pedido
-    db.prepare(`
+    await db.prepare(`
       UPDATE orders 
       SET status = 'cancelled', payment_status = 'failed', updated_at = CURRENT_TIMESTAMP
       WHERE id = ?

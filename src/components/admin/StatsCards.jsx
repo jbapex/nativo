@@ -11,7 +11,9 @@ export default function StatsCards({ data, loading }) {
       .filter(sub => sub.status === "active")
       .reduce((sum, sub) => {
         const plan = data.plans.find(p => p.id === sub.plan_id);
-        return sum + (plan?.price || 0);
+        // Converter price para número (pode vir como string do PostgreSQL)
+        const planPrice = parseFloat(plan?.price) || 0;
+        return sum + planPrice;
       }, 0);
 
     const salesGrowth = Math.floor(Math.random() * 30) + 5; // Simulado por enquanto
@@ -20,7 +22,7 @@ export default function StatsCards({ data, loading }) {
       totalStores: data.stores.length,
       activeStores,
       totalProducts: activeProducts,
-      monthlyRevenue,
+      monthlyRevenue: Number(monthlyRevenue) || 0, // Garantir que é número
       salesGrowth
     };
   };
@@ -49,7 +51,7 @@ export default function StatsCards({ data, loading }) {
       />
       <StatsCard
         title="Receita Mensal"
-        value={loading ? "-" : `R$ ${stats.monthlyRevenue?.toFixed(2)}`}
+        value={loading ? "-" : `R$ ${(Number(stats.monthlyRevenue) || 0).toFixed(2)}`}
         subValue={loading ? "" : `+${stats.salesGrowth}% este mês`}
         icon={<TrendingUp className="h-6 w-6" />}
         loading={loading}

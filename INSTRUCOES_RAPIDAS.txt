@@ -1,0 +1,37 @@
+═══════════════════════════════════════════════════════════════
+  COMO CRIAR AS COLUNAS FALTANTES - INSTRUÇÕES RÁPIDAS
+═══════════════════════════════════════════════════════════════
+
+PROBLEMA:
+  O usuário 'localmart' não tem permissão para alterar a tabela.
+  Você precisa usar um superusuário do PostgreSQL.
+
+SOLUÇÃO MAIS RÁPIDA (pgAdmin):
+
+1. Abra o pgAdmin
+2. Conecte-se ao servidor PostgreSQL (porta 5433)
+3. Clique com botão direito em: Databases → local_mart → Query Tool
+4. Abra o arquivo: EXECUTAR_NO_PGADMIN.sql
+5. Clique em Execute (F5)
+6. Verifique se apareceu "SUCCESS" para cada comando
+7. Pronto! Tente salvar as customizações novamente.
+
+═══════════════════════════════════════════════════════════════
+
+ALTERNATIVA (Terminal com Node.js):
+
+Execute:
+  node backend/scripts/criar_colunas_com_superuser.js
+
+O script pedirá as credenciais do superusuário.
+
+═══════════════════════════════════════════════════════════════
+
+Arquivos criados:
+  ✓ EXECUTAR_NO_PGADMIN.sql - SQL pronto para executar
+  ✓ COMO_CRIAR_COLUNAS.md - Guia detalhado
+  ✓ SOLUCAO_RAPIDA.md - Guia rápido
+  ✓ backend/scripts/criar_colunas_com_superuser.js - Script Node.js
+
+═══════════════════════════════════════════════════════════════
+

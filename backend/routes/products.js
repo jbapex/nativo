@@ -10,21 +10,34 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 
 // Listar produtos (público, mas pode filtrar por usuário autenticado)
-router.get('/', optionalAuth, (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
-    let query = 'SELECT p.*, s.name as store_name, c.name as category_name FROM products p';
+    let query = 'SELECT p.*, s.name as store_name, s.status as store_status, c.name as category_name FROM products p';
     query += ' INNER JOIN stores s ON p.store_id = s.id';
     query += ' LEFT JOIN categories c ON p.category_id = c.id';
-    query += ' WHERE p.active = 1';
+    query += ' WHERE p.active = true';
 
     const params = [];
 
     // Se o usuário estiver autenticado e filtrando por sua própria loja, mostrar produtos mesmo se a loja não estiver aprovada
     let allowUnapprovedStore = false;
+    let actualStoreIdForCheck = null;
+    
     if (req.user && req.query.store_id) {
-      const userStore = db.prepare('SELECT id, user_id FROM stores WHERE id = ?').get(req.query.store_id);
+      const storeIdentifier = req.query.store_id;
+      const isUUID = storeIdentifier.length === 36 && storeIdentifier.includes('-');
+      
+      // Buscar loja por ID ou slug
+      let userStore;
+      if (isUUID) {
+        userStore = await db.prepare('SELECT id, user_id FROM stores WHERE id = ?').get(storeIdentifier);
+      } else {
+        userStore = await db.prepare('SELECT id, user_id FROM stores WHERE slug = ?').get(storeIdentifier);
+      }
+      
       if (userStore && userStore.user_id === req.user.id) {
         allowUnapprovedStore = true;
+        actualStoreIdForCheck = userStore.id;
       }
     }
 
@@ -40,8 +53,28 @@ router.get('/', optionalAuth, (req, res) => {
     }
 
     if (req.query.store_id) {
+      // Verificar se store_id é um UUID ou slug
+      const storeIdentifier = req.query.store_id;
+      const isUUID = storeIdentifier.length === 36 && storeIdentifier.includes('-');
+      
+      let actualStoreId = storeIdentifier;
+      
+      // Se for slug, buscar o ID da loja primeiro
+      if (!isUUID) {
+        try {
+          const store = await db.prepare('SELECT id FROM stores WHERE slug = ?').get(storeIdentifier);
+          if (!store) {
+            return res.status(404).json({ error: 'Loja não encontrada' });
+          }
+          actualStoreId = store.id;
+        } catch (error) {
+          console.error('Erro ao buscar loja por slug:', error);
+          return res.status(500).json({ error: 'Erro ao buscar loja' });
+        }
+      }
+      
       query += ' AND p.store_id = ?';
-      params.push(req.query.store_id);
+      params.push(actualStoreId);
     }
 
     if (req.query.city_id) {
@@ -90,7 +123,7 @@ router.get('/', optionalAuth, (req, res) => {
     const countQuery = query
       .replace(/SELECT p\.\*, s\.name as store_name, c\.name as category_name FROM/, 'SELECT COUNT(*) as total FROM')
       .replace(/ORDER BY.*$/, ''); // Remover ORDER BY da query de contagem
-    const countResult = db.prepare(countQuery).get(...params);
+    const countResult = await db.prepare(countQuery).get(...params);
     const total = countResult?.total || 0;
     
     // Aplicar paginação
@@ -101,11 +134,11 @@ router.get('/', optionalAuth, (req, res) => {
     console.log('Params:', params);
     console.log('Paginação:', { page, limit, offset, total });
     
-    const products = db.prepare(query).all(...params);
+    const products = await db.prepare(query).all(...params);
     console.log(`Produtos encontrados no banco: ${products.length}`);
 
-    // Parse JSON fields com tratamento de erro melhorado
-    const formatted = products.map(p => {
+    // Parse JSON fields com tratamento de erro melhorado e adicionar informações de campanha
+    const formatted = await Promise.all(products.map(async (p) => {
       let images = [];
       let tags = [];
       
@@ -127,15 +160,67 @@ router.get('/', optionalAuth, (req, res) => {
         console.error('Erro ao fazer parse das tags do produto:', p.id, parseError);
         tags = [];
       }
+
+      // Buscar informações de campanha para este produto
+      let campaignInfo = null;
+      try {
+        // Verificar se a tabela campaign_participations existe
+        const tableCheck = await db.prepare('SELECT 1 FROM campaign_participations LIMIT 1').get().catch(() => null);
+        if (tableCheck) {
+          const { isSQLite } = await import('../database/db-wrapper.js');
+          const now = new Date().toISOString();
+          const activeValue = isSQLite() ? 1 : true;
+          
+          const participation = await db.prepare(`
+            SELECT 
+              cp.discount_percent,
+              cp.discount_fixed,
+              cp.promo_price,
+              cp.original_price,
+              mc.id as campaign_id,
+              mc.name as campaign_name,
+              mc.badge_text,
+              mc.badge_color,
+              mc.slug as campaign_slug
+            FROM campaign_participations cp
+            INNER JOIN marketplace_campaigns mc ON cp.campaign_id = mc.id
+            WHERE cp.product_id = ? 
+              AND cp.status = 'approved'
+              AND mc.active = ?
+              AND mc.start_date <= ?
+              AND mc.end_date >= ?
+            ORDER BY mc.start_date DESC
+            LIMIT 1
+          `).get(p.id, activeValue, now, now);
+          
+          if (participation) {
+            campaignInfo = {
+              id: participation.campaign_id,
+              name: participation.campaign_name,
+              badge_text: participation.badge_text || "EM PROMOÇÃO",
+              badge_color: participation.badge_color || "#EF4444",
+              slug: participation.campaign_slug,
+              discount_percent: participation.discount_percent,
+              discount_fixed: participation.discount_fixed,
+              promo_price: participation.promo_price,
+              original_price: participation.original_price
+            };
+          }
+        }
+      } catch (campaignError) {
+        // Se houver erro ao buscar campanha, apenas logar e continuar
+        console.warn('Erro ao buscar campanha para produto:', p.id, campaignError.message);
+      }
       
       return {
         ...p,
         images: images,
         tags: tags,
         active: p.active === 1 || p.active === true,
-        category_id: p.category_id || null // Garantir que category_id está presente
+        category_id: p.category_id || null, // Garantir que category_id está presente
+        campaign: campaignInfo // Adicionar informações de campanha
       };
-    });
+    }));
 
     console.log(`Produtos formatados: ${formatted.length}`);
     
@@ -150,14 +235,19 @@ router.get('/', optionalAuth, (req, res) => {
 });
 
 // Obter produto por ID
-router.get('/:id', optionalAuth, (req, res) => {
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID do produto é obrigatório' });
+    }
+
     // Verificar se o usuário está autenticado e se está buscando produto da sua própria loja
     let allowUnapprovedStore = false;
     if (req.user) {
-      const productCheck = db.prepare('SELECT store_id FROM products WHERE id = ?').get(req.params.id);
+      const productCheck = await db.prepare('SELECT store_id FROM products WHERE id = ?').get(req.params.id);
       if (productCheck) {
-        const userStore = db.prepare('SELECT id, user_id FROM stores WHERE id = ?').get(productCheck.store_id);
+        const userStore = await db.prepare('SELECT id, user_id FROM stores WHERE id = ?').get(productCheck.store_id);
         if (userStore && userStore.user_id === req.user.id) {
           allowUnapprovedStore = true;
         }
@@ -182,7 +272,7 @@ router.get('/:id', optionalAuth, (req, res) => {
       params.push('approved');
     }
     
-    const product = db.prepare(query).get(...params);
+    const product = await db.prepare(query).get(...params);
 
     if (!product) {
       return res.status(404).json({ error: 'Produto não encontrado' });
@@ -191,6 +281,8 @@ router.get('/:id', optionalAuth, (req, res) => {
     // Parse JSON fields com tratamento de erro
     let images = [];
     let tags = [];
+    let technicalSpecs = null;
+    let includedItems = null;
     
     try {
       images = product.images ? JSON.parse(product.images) : [];
@@ -210,13 +302,47 @@ router.get('/:id', optionalAuth, (req, res) => {
       console.error('Erro ao fazer parse das tags do produto:', parseError);
       tags = [];
     }
+    
+    try {
+      technicalSpecs = product.technical_specs ? JSON.parse(product.technical_specs) : null;
+    } catch (parseError) {
+      technicalSpecs = product.technical_specs || null;
+    }
+    
+    try {
+      includedItems = product.included_items ? JSON.parse(product.included_items) : null;
+    } catch (parseError) {
+      includedItems = product.included_items || null;
+    }
+    
+    // Parse attributes JSON
+    let parsedAttributes = null;
+    try {
+      parsedAttributes = product.attributes ? JSON.parse(product.attributes) : null;
+    } catch (parseError) {
+      parsedAttributes = product.attributes || null;
+    }
 
     const formatted = {
       ...product,
       images: images,
       tags: tags,
+      technical_specs: technicalSpecs,
+      included_items: includedItems,
+      warranty_info: product.warranty_info || null,
+      attributes: parsedAttributes,
       category_id: product.category_id || null // Garantir que category_id está presente
     };
+
+    console.log('📦 Produto formatado para retorno:', {
+      id: formatted.id,
+      name: formatted.name,
+      has_technical_specs: !!formatted.technical_specs,
+      has_included_items: !!formatted.included_items,
+      has_warranty_info: !!formatted.warranty_info,
+      has_attributes: !!formatted.attributes,
+      category_id: formatted.category_id
+    });
 
     res.json(formatted);
   } catch (error) {
@@ -248,17 +374,20 @@ router.post('/', authenticateToken, validate(productSchema), async (req, res) =>
       console.log('✅ Permissão concedida: role no token é', req.user.role);
     } else {
       // Verificar se o usuário tem uma loja cadastrada (mesmo que o role no token seja 'customer')
-      store = db.prepare('SELECT id, name, status, plan_id FROM stores WHERE user_id = ?').get(req.user.id);
+      if (!req.user?.id) {
+        return res.status(401).json({ error: 'Usuário não autenticado' });
+      }
+      store = await db.prepare('SELECT id, name, status, plan_id FROM stores WHERE user_id = ?').get(req.user.id);
       console.log('🔍 Verificando loja do usuário:', store ? { id: store.id, name: store.name, status: store.status, plan_id: store.plan_id } : '❌ Nenhuma loja encontrada');
       
       if (store) {
         hasPermission = true;
         console.log('✅ Loja encontrada - permissão concedida');
         // Se tem loja mas o role no token está desatualizado, atualizar no banco
-        const userInDb = db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.id);
+        const userInDb = await db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.id);
         console.log('📋 Role no banco de dados:', userInDb?.role);
         if (userInDb && userInDb.role !== 'store' && userInDb.role !== 'admin') {
-          db.prepare('UPDATE users SET role = ? WHERE id = ?').run('store', req.user.id);
+          await db.prepare('UPDATE users SET role = ? WHERE id = ?').run('store', req.user.id);
           console.log('🔄 Role do usuário atualizado de', userInDb.role, 'para store');
         }
       } else {
@@ -278,7 +407,7 @@ router.post('/', authenticateToken, validate(productSchema), async (req, res) =>
     
     console.log('=== FIM VERIFICAÇÃO DE PERMISSÃO ===');
 
-    const { name, description, price, images, category_id, tags, stock } = req.body;
+    const { name, description, price, images, category_id, tags, stock, active, technical_specs, included_items, warranty_info } = req.body;
 
     // Validações
     if (!name || name.trim() === '') {
@@ -291,7 +420,7 @@ router.post('/', authenticateToken, validate(productSchema), async (req, res) =>
 
     // Buscar loja do usuário (pode ser aprovada ou pendente) se ainda não foi buscada
     if (!store) {
-      store = db.prepare('SELECT * FROM stores WHERE user_id = ?').get(req.user.id);
+      store = await db.prepare('SELECT * FROM stores WHERE user_id = ?').get(req.user.id);
       console.log('🔍 Loja buscada novamente:', store ? { id: store.id, name: store.name, status: store.status, plan_id: store.plan_id } : 'Nenhuma loja encontrada');
     }
     
@@ -337,7 +466,7 @@ router.post('/', authenticateToken, validate(productSchema), async (req, res) =>
         productLimit = activeSubscription.product_limit;
         limitSource = `assinatura (${activeSubscription.plan_id})`;
       } else if (store && store.plan_id) {
-        const plan = db.prepare('SELECT product_limit FROM plans WHERE id = ?').get(store.plan_id);
+        const plan = await db.prepare('SELECT product_limit FROM plans WHERE id = ?').get(store.plan_id);
         console.log('Plano da loja:', plan ? { id: store.plan_id, product_limit: plan.product_limit } : 'Plano não encontrado');
         if (plan && plan.product_limit !== null) {
           productLimit = plan.product_limit;
@@ -377,7 +506,7 @@ router.post('/', authenticateToken, validate(productSchema), async (req, res) =>
 
     // Validar category_id se fornecido
     if (category_id) {
-      const category = db.prepare('SELECT id FROM categories WHERE id = ?').get(category_id);
+      const category = await db.prepare('SELECT id FROM categories WHERE id = ?').get(category_id);
       if (!category) {
         return res.status(400).json({ error: 'Categoria inválida' });
       }
@@ -386,9 +515,15 @@ router.post('/', authenticateToken, validate(productSchema), async (req, res) =>
     // Sanitizar descrição para prevenir XSS
     const sanitizedDescription = description ? sanitizeHTML(description.trim()) : '';
 
-    db.prepare(`
-      INSERT INTO products (id, store_id, category_id, name, description, price, images, tags, stock, active)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+    const isActive = active === undefined ? true : !!active;
+    
+    // Processar attributes se fornecido
+    const { attributes } = req.body;
+    const attributesJson = attributes ? JSON.stringify(attributes) : null;
+    
+    await db.prepare(`
+      INSERT INTO products (id, store_id, category_id, name, description, price, images, tags, stock, active, technical_specs, included_items, warranty_info, attributes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id,
       storeId,
@@ -398,14 +533,47 @@ router.post('/', authenticateToken, validate(productSchema), async (req, res) =>
       price,
       images ? JSON.stringify(images) : '[]',
       tags ? JSON.stringify(tags) : '[]',
-      stock || null
+      stock || null,
+      isActive,
+      technical_specs || null,
+      included_items || null,
+      warranty_info || null,
+      attributesJson
     );
 
-    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+    const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(id);
+    
+    // Parse JSON fields
+    let technicalSpecs = null;
+    let includedItems = null;
+    
+    try {
+      technicalSpecs = product.technical_specs ? JSON.parse(product.technical_specs) : null;
+    } catch (parseError) {
+      technicalSpecs = product.technical_specs || null;
+    }
+    
+    try {
+      includedItems = product.included_items ? JSON.parse(product.included_items) : null;
+    } catch (parseError) {
+      includedItems = product.included_items || null;
+    }
+    
+    // Parse attributes JSON
+    let parsedAttributes = null;
+    try {
+      parsedAttributes = product.attributes ? JSON.parse(product.attributes) : null;
+    } catch (parseError) {
+      parsedAttributes = product.attributes || null;
+    }
+    
     const formatted = {
       ...product,
       images: product.images ? JSON.parse(product.images) : [],
       tags: product.tags ? JSON.parse(product.tags) : [],
+      technical_specs: technicalSpecs,
+      included_items: includedItems,
+      attributes: parsedAttributes,
       category_id: product.category_id || null // Garantir que category_id está presente
     };
 
@@ -423,19 +591,20 @@ router.post('/', authenticateToken, validate(productSchema), async (req, res) =>
 });
 
 // Atualizar produto
-router.put('/:id', authenticateToken, requireProductOwnership, validate(productSchema.partial()), (req, res) => {
+router.put('/:id', authenticateToken, requireProductOwnership, validate(productSchema.partial()), async (req, res) => {
   try {
     // Verificar se o produto existe
-    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+    const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
     
     if (!product) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
 
-    const { 
+    const {
       name, description, price, images, category_id, tags, stock, active,
       total_views, views_from_marketplace, views_from_store,
-      total_messages, total_favorites, whatsapp, status, compare_price
+      total_messages, total_favorites, whatsapp, status, compare_price,
+      technical_specs, included_items, warranty_info, attributes
     } = req.body;
     
     const updates = [];
@@ -457,7 +626,7 @@ router.put('/:id', authenticateToken, requireProductOwnership, validate(productS
     }
     if (tags !== undefined) { updates.push('tags = ?'); values.push(JSON.stringify(tags)); }
     if (stock !== undefined) { updates.push('stock = ?'); values.push(stock); }
-    if (active !== undefined) { updates.push('active = ?'); values.push(active ? 1 : 0); }
+    if (active !== undefined) { updates.push('active = ?'); values.push(active ? true : false); }
     if (status !== undefined) { updates.push('status = ?'); values.push(status); }
     if (whatsapp !== undefined) { updates.push('whatsapp = ?'); values.push(whatsapp); }
     if (total_views !== undefined) { updates.push('total_views = ?'); values.push(total_views); }
@@ -465,21 +634,64 @@ router.put('/:id', authenticateToken, requireProductOwnership, validate(productS
     if (views_from_store !== undefined) { updates.push('views_from_store = ?'); values.push(views_from_store); }
     if (total_messages !== undefined) { updates.push('total_messages = ?'); values.push(total_messages); }
     if (total_favorites !== undefined) { updates.push('total_favorites = ?'); values.push(total_favorites); }
+    if (technical_specs !== undefined) { updates.push('technical_specs = ?'); values.push(technical_specs); }
+    if (included_items !== undefined) { updates.push('included_items = ?'); values.push(included_items); }
+    if (warranty_info !== undefined) { updates.push('warranty_info = ?'); values.push(warranty_info); }
+    if (attributes !== undefined) { 
+      updates.push('attributes = ?'); 
+      // Se já for string (JSON), usar diretamente; se for objeto, fazer stringify
+      if (attributes === null || attributes === '') {
+        values.push(null);
+      } else if (typeof attributes === 'string') {
+        // Já é string JSON, usar diretamente
+        values.push(attributes);
+      } else {
+        // É objeto, fazer stringify
+        values.push(JSON.stringify(attributes));
+      }
+    }
 
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(req.params.id);
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE products 
       SET ${updates.join(', ')}
       WHERE id = ?
     `).run(...values);
 
-    const updated = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+    const updated = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+    
+    // Parse JSON fields
+    let technicalSpecs = null;
+    let includedItems = null;
+    let parsedAttributes = null;
+    
+    try {
+      technicalSpecs = updated.technical_specs ? JSON.parse(updated.technical_specs) : null;
+    } catch (parseError) {
+      technicalSpecs = updated.technical_specs || null;
+    }
+    
+    try {
+      includedItems = updated.included_items ? JSON.parse(updated.included_items) : null;
+    } catch (parseError) {
+      includedItems = updated.included_items || null;
+    }
+    
+    try {
+      parsedAttributes = updated.attributes ? JSON.parse(updated.attributes) : null;
+    } catch (parseError) {
+      parsedAttributes = updated.attributes || null;
+    }
+    
     const formatted = {
       ...updated,
       images: updated.images ? JSON.parse(updated.images) : [],
       tags: updated.tags ? JSON.parse(updated.tags) : [],
+      technical_specs: technicalSpecs,
+      included_items: includedItems,
+      attributes: parsedAttributes,
       category_id: updated.category_id || null // Garantir que category_id está presente
     };
 
@@ -491,13 +703,13 @@ router.put('/:id', authenticateToken, requireProductOwnership, validate(productS
 });
 
 // Incrementar métricas (público - não requer autenticação)
-router.patch('/:id/metrics', optionalAuth, (req, res) => {
+router.patch('/:id/metrics', optionalAuth, async (req, res) => {
   try {
     const productId = req.params.id;
     const { metricType, viewSource } = req.body;
     
     // Verificar se o produto existe
-    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
+    const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(productId);
     
     if (!product) {
       return res.status(404).json({ error: 'Produto não encontrado' });
@@ -532,7 +744,7 @@ router.patch('/:id/metrics', optionalAuth, (req, res) => {
     }
 
     // Atualizar no banco de dados
-    db.prepare(`
+    await db.prepare(`
       UPDATE products 
       SET 
         total_views = ?,
@@ -562,15 +774,20 @@ router.patch('/:id/metrics', optionalAuth, (req, res) => {
 });
 
 // Deletar produto
-router.delete('/:id', authenticateToken, requireProductOwnership, (req, res) => {
+router.delete('/:id', authenticateToken, requireProductOwnership, async (req, res) => {
   try {
-    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
+    // Validar ID
+    if (!req.params.id || req.params.id === 'undefined') {
+      return res.status(400).json({ error: 'ID do produto é obrigatório' });
+    }
+
+    const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(req.params.id);
     
     if (!product) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
 
-    db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
+    await db.prepare('DELETE FROM products WHERE id = ?').run(req.params.id);
     res.json({ message: 'Produto deletado com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar produto:', error);

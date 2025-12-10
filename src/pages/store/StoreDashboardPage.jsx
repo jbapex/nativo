@@ -2,12 +2,15 @@ import React, { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { 
   Package, 
   Eye, 
   MessageSquare, 
   Heart, 
   ShoppingBag,
+  ShoppingCart,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -18,13 +21,20 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
-import { Orders as OrdersAPI } from "@/api/entities";
+import { Orders as OrdersAPI, Store } from "@/api/entities";
 import StoreDashboard from "@/components/store/StoreDashboard";
 import { toast } from "@/components/ui/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { formatCurrency } from "@/lib/utils";
 
 export default function StoreDashboardPage({ store, products, plan, isStoreOnlineActive }) {
+  console.log("📊 StoreDashboardPage: Renderizando", { 
+    hasStore: !!store, 
+    productsCount: products?.length,
+    hasPlan: !!plan 
+  });
+  
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
@@ -36,15 +46,35 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
     totalMessages: 0,
     totalFavorites: 0,
     pendingOrders: 0,
-    totalOrders: 0
+    totalOrders: 0,
+    cartAdditions: 0,
+    conversionRate: 0
   });
+  const [storeStats, setStoreStats] = useState(null);
 
   useEffect(() => {
     if (store) {
       calculateStats();
       loadOrders();
+      loadStoreStats();
     }
   }, [store, products]);
+
+  const loadStoreStats = async () => {
+    if (!store?.id) return;
+    
+    try {
+      const statsData = await Store.getStats(store.id);
+      setStoreStats(statsData);
+      setStats(prev => ({
+        ...prev,
+        cartAdditions: statsData?.cart?.total_additions || 0,
+        conversionRate: parseFloat(statsData?.conversion?.views_to_cart_rate || 0)
+      }));
+    } catch (error) {
+      console.error("Erro ao carregar estatísticas da loja:", error);
+    }
+  };
 
   const calculateStats = () => {
     const totalProducts = products?.length || 0;
@@ -101,6 +131,26 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
 
   const recentOrders = orders?.slice(0, 5) || [];
 
+  console.log("✅ StoreDashboardPage: Retornando JSX", { 
+    recentOrdersCount: recentOrders.length,
+    stats: stats,
+    hasStore: !!store
+  });
+
+  if (!store) {
+    console.warn("⚠️ StoreDashboardPage: store é null/undefined");
+    return (
+      <div className="p-8">
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            Loja não encontrada. Por favor, recarregue a página.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -144,7 +194,7 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -160,7 +210,7 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
               variant="ghost"
               size="sm"
               className="mt-4 w-full"
-              onClick={() => navigate(createPageUrl("StoreProducts"))}
+              onClick={() => navigate("/loja/produtos")}
             >
               Ver todos
             </Button>
@@ -182,7 +232,7 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
               variant="ghost"
               size="sm"
               className="mt-4 w-full"
-              onClick={() => navigate(createPageUrl("StoreOrders"))}
+              onClick={() => navigate("/loja/pedidos")}
             >
               Ver pedidos
             </Button>
@@ -214,7 +264,7 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
               variant="ghost"
               size="sm"
               className="mt-4 w-full"
-              onClick={() => navigate(createPageUrl("StoreAnalytics"))}
+              onClick={() => navigate("/loja/estatisticas")}
             >
               Ver estatísticas
             </Button>
@@ -235,6 +285,33 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
             </div>
           </CardContent>
         </Card>
+
+        {storeStats && (
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-500">Adições ao Carrinho</p>
+                  <h3 className="text-2xl font-bold mt-1">{stats.cartAdditions.toLocaleString('pt-BR')}</h3>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {storeStats.cart?.unique_users || 0} cliente{storeStats.cart?.unique_users !== 1 ? 's' : ''}
+                  </p>
+                </div>
+                <div className="bg-orange-100 p-3 rounded-full">
+                  <ShoppingCart className="w-6 h-6 text-orange-600" />
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-4 w-full"
+                onClick={() => navigate("/loja/estatisticas")}
+              >
+                Ver relatórios
+              </Button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Store Link Card */}
@@ -251,56 +328,115 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <div className="flex-1 bg-white rounded-md p-2 border">
-                  <p className="text-sm text-gray-600 truncate">
-                    {window.location.origin}{createPageUrl(`StoreFront?id=${store?.id}`)}
-                  </p>
+              {/* Link da Loja Comum */}
+              <div>
+                <Label className="text-sm font-medium text-gray-700 mb-2 block">Link da Loja</Label>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-white rounded-md p-2 border">
+                    <p className="text-sm text-gray-600 truncate">
+                      {window.location.origin}{createPageUrl(`StoreFront?id=${store?.id}`)}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const link = `${window.location.origin}${createPageUrl(`StoreFront?id=${store?.id}`)}`;
+                      navigator.clipboard.writeText(link);
+                      toast({
+                        title: "Copiado!",
+                        description: "Link da loja copiado para a área de transferência",
+                      });
+                    }}
+                  >
+                    <Copy className="w-4 h-4 mr-2" />
+                    Copiar
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(createPageUrl(`StoreFront?id=${store?.id}`), '_blank')}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Visualizar
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={handleCopyLink}
-                >
-                  <Copy className="w-4 h-4 mr-2" />
-                  Copiar
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => window.open(createPageUrl(`StoreFront?id=${store?.id}`), '_blank')}
-                >
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Visualizar
-                </Button>
               </div>
 
               {isStoreOnlineActive && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-purple-800 font-medium mb-3">
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-4">
+                  <div className="flex items-center gap-2 text-purple-800 font-medium">
                     <CheckCircle className="w-4 h-4" />
                     <span>Modo Loja Online Premium Ativo</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-white rounded-md p-2 border">
-                      <p className="text-sm text-gray-600 truncate">
-                        {window.location.origin}{createPageUrl(`StoreOnline?id=${store?.id}`)}
-                      </p>
+                  
+                  {/* Link Personalizado (se tiver slug) */}
+                  {store?.slug && (
+                    <div>
+                      <Label className="text-sm font-medium text-purple-800 mb-2 block">
+                        🔗 Link Personalizado (Oficial)
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-white rounded-md p-2 border">
+                          <p className="text-sm text-gray-900 font-mono truncate font-semibold">
+                            {window.location.origin}/{store.slug}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const link = `${window.location.origin}/${store.slug}`;
+                            navigator.clipboard.writeText(link);
+                            toast({
+                              title: "Link copiado!",
+                              description: "Link personalizado copiado para a área de transferência",
+                            });
+                          }}
+                        >
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copiar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(`/${store.slug}`, '_blank')}
+                        >
+                          <ExternalLink className="w-4 h-4 mr-2" />
+                          Visualizar
+                        </Button>
+                      </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCopyLink('storeonline')}
-                    >
-                      <Copy className="w-4 h-4 mr-2" />
-                      Copiar
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(createPageUrl(`StoreOnline?id=${store?.id}`), '_blank')}
-                    >
-                      <ExternalLink className="w-4 h-4 mr-2" />
-                      Visualizar
-                    </Button>
+                  )}
+                  
+                  {/* Link Padrão da Loja Online */}
+                  <div>
+                    <Label className="text-sm font-medium text-purple-800 mb-2 block">
+                      Link Padrão da Loja Online
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-white rounded-md p-2 border">
+                        <p className="text-sm text-gray-600 truncate">
+                          {window.location.origin}{createPageUrl(`StoreOnline?id=${store?.id}`)}
+                        </p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopyLink('storeonline')}
+                      >
+                        <Copy className="w-4 h-4 mr-2" />
+                        Copiar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(createPageUrl(`StoreOnline?id=${store?.id}`), '_blank')}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Visualizar
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -321,7 +457,7 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => navigate(createPageUrl("StoreOrders"))}
+                onClick={() => navigate("/loja/pedidos")}
               >
                 Ver todos
               </Button>
@@ -365,7 +501,7 @@ export default function StoreDashboardPage({ store, products, plan, isStoreOnlin
                   </div>
                   <div className="text-right">
                     <p className="font-bold text-green-600">
-                      R$ {parseFloat(order.total_amount || 0).toFixed(2).replace('.', ',')}
+                      {formatCurrency(order.total_amount || 0)}
                     </p>
                   </div>
                 </div>

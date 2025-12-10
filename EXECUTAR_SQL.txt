@@ -1,0 +1,54 @@
+═══════════════════════════════════════════════════════════════
+  COMANDOS SQL PARA EXECUTAR
+═══════════════════════════════════════════════════════════════
+
+Copie e cole estes comandos no seu cliente PostgreSQL:
+
+───────────────────────────────────────────────────────────────
+COMANDO 1: Criar a coluna
+───────────────────────────────────────────────────────────────
+
+ALTER TABLE marketplace_campaigns 
+ADD COLUMN IF NOT EXISTS banner_page_image TEXT;
+
+───────────────────────────────────────────────────────────────
+COMANDO 2: Dar permissões
+───────────────────────────────────────────────────────────────
+
+GRANT ALL PRIVILEGES ON COLUMN marketplace_campaigns.banner_page_image TO localmart;
+
+───────────────────────────────────────────────────────────────
+COMANDO 3: Verificar (opcional)
+───────────────────────────────────────────────────────────────
+
+SELECT column_name, data_type 
+FROM information_schema.columns 
+WHERE table_name = 'marketplace_campaigns' 
+AND column_name = 'banner_page_image';
+
+═══════════════════════════════════════════════════════════════
+  ONDE EXECUTAR?
+═══════════════════════════════════════════════════════════════
+
+OPÇÃO 1: pgAdmin
+  1. Abra pgAdmin
+  2. Conecte ao servidor
+  3. Clique com botão direito em "local_mart" > "Query Tool"
+  4. Cole os comandos acima
+  5. Clique em "Execute" (F5)
+
+OPÇÃO 2: Terminal (se tiver psql)
+  1. Abra o Terminal
+  2. Execute: /Applications/PostgreSQL\ 17/bin/psql -h localhost -p 5433 -U josiasbonfimdefaria -d local_mart
+  3. Cole os comandos SQL acima
+  4. Digite \q para sair
+
+OPÇÃO 3: TablePlus / DBeaver
+  1. Abra o aplicativo
+  2. Conecte ao banco local_mart
+  3. Abra o Query Editor
+  4. Cole os comandos acima
+  5. Execute
+
+═══════════════════════════════════════════════════════════════
+

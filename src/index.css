@@ -76,6 +76,38 @@ button:focus-visible {
 
 @layer base {
   :root {
+    /* Cores customizáveis do sistema - serão sobrescritas dinamicamente */
+    --primary-color: #2563eb;
+    --secondary-color: #06b6d4;
+    --accent-color: #10b981;
+    --background-color: #ffffff;
+    --text-color: #1f2937;
+    --header-color: #ffffff;
+    --footer-color: #f9fafb;
+    --button-primary-color: #2563eb;
+    --button-secondary-color: #06b6d4;
+    --button-text-color: #ffffff;
+    --link-color: #2563eb;
+    --link-hover-color: #1d4ed8;
+    --card-background-color: #ffffff;
+    --card-border-color: #e5e7eb;
+    --card-shadow-color: rgba(0, 0, 0, 0.1);
+    --input-background-color: #ffffff;
+    --input-border-color: #d1d5db;
+    --input-focus-color: #2563eb;
+    --focus-ring-color: #2563eb;
+    --text-secondary-color: #6b7280;
+    --text-muted-color: #9ca3af;
+    --border-color: #e5e7eb;
+    --section-background-color: #f9fafb;
+    --badge-primary-color: #2563eb;
+    --badge-secondary-color: #06b6d4;
+    --badge-success-color: #10b981;
+    --badge-error-color: #ef4444;
+    --badge-warning-color: #f59e0b;
+    --hover-color: rgba(37, 99, 235, 0.1);
+    
+    /* Shadcn/UI defaults */
     --background: 0 0% 100%;
     --foreground: 0 0% 3.9%;
     --card: 0 0% 100%;
@@ -155,4 +187,182 @@ button:focus-visible {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Estilos dinâmicos usando CSS variables das configurações de aparência */
+:root {
+  /* Aplicar cores de botões */
+  --btn-primary-bg: var(--button-primary-color, #2563eb);
+  --btn-primary-text: var(--button-text-color, #ffffff);
+  --btn-secondary-bg: var(--button-secondary-color, #06b6d4);
+  
+  /* Aplicar cores de links */
+  --link-color-default: var(--link-color, #2563eb);
+  --link-color-hover: var(--link-hover-color, #1d4ed8);
+  
+  /* Aplicar cores de cards */
+  --card-bg: var(--card-background-color, #ffffff);
+  --card-border: var(--card-border-color, #e5e7eb);
+  --card-shadow: var(--card-shadow-color, rgba(0, 0, 0, 0.1));
+  
+  /* Aplicar cores de inputs */
+  --input-bg: var(--input-background-color, #ffffff);
+  --input-border: var(--input-border-color, #d1d5db);
+  --input-focus: var(--input-focus-color, #2563eb);
+  
+  /* Aplicar cores de texto */
+  --text-secondary: var(--text-secondary-color, #6b7280);
+  --text-muted: var(--text-muted-color, #9ca3af);
+  
+  /* Aplicar cores de bordas e seções */
+  --border-default: var(--border-color, #e5e7eb);
+  --section-bg: var(--section-background-color, #f9fafb);
+  
+  /* Aplicar cores de badges */
+  --badge-primary: var(--badge-primary-color, #2563eb);
+  --badge-secondary: var(--badge-secondary-color, #06b6d4);
+  --badge-success: var(--badge-success-color, #10b981);
+  --badge-error: var(--badge-error-color, #ef4444);
+  --badge-warning: var(--badge-warning-color, #f59e0b);
+  
+  /* Aplicar cores de estados */
+  --hover-bg: var(--hover-color, rgba(37, 99, 235, 0.1));
+  --focus-ring: var(--focus-ring-color, #2563eb);
+}
+
+/* Aplicar cores em elementos específicos quando as variáveis estão definidas */
+/* Aplicar também sem data-theme para garantir que funcione em todos os casos */
+a:not([class*="text-"]):not([style*="color"]),
+.link:not([class*="text-"]):not([style*="color"]) {
+  color: var(--link-color-default, var(--link-color, #2563eb));
+}
+
+a:hover:not([class*="text-"]):not([style*="color"]),
+.link:hover:not([class*="text-"]):not([style*="color"]) {
+  color: var(--link-color-hover, var(--link-hover-color, #1d4ed8));
+}
+
+[data-theme="custom"] a,
+[data-theme="custom"] .link {
+  color: var(--link-color-default);
+}
+
+[data-theme="custom"] a:hover,
+[data-theme="custom"] .link:hover {
+  color: var(--link-color-hover);
+}
+
+/* Cards - aplicar quando não tiver background definido */
+.card:not([style*="background"]):not([class*="bg-"]),
+[class*="card"]:not([style*="background"]):not([class*="bg-"]) {
+  background-color: var(--card-bg, var(--card-background-color, #ffffff));
+  border-color: var(--card-border, var(--card-border-color, #e5e7eb));
+}
+
+[data-theme="custom"] .card,
+[data-theme="custom"] [class*="card"] {
+  background-color: var(--card-bg);
+  border-color: var(--card-border);
+  box-shadow: 0 1px 3px 0 var(--card-shadow);
+}
+
+/* Inputs */
+input:not([style*="background"]):not([class*="bg-"]),
+textarea:not([style*="background"]):not([class*="bg-"]),
+select:not([style*="background"]):not([class*="bg-"]) {
+  background-color: var(--input-bg, var(--input-background-color, #ffffff));
+  border-color: var(--input-border, var(--input-border-color, #d1d5db));
+}
+
+[data-theme="custom"] input,
+[data-theme="custom"] textarea,
+[data-theme="custom"] select {
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+}
+
+input:focus:not([style*="border"]):not([style*="outline"]),
+textarea:focus:not([style*="border"]):not([style*="outline"]),
+select:focus:not([style*="border"]):not([style*="outline"]) {
+  border-color: var(--input-focus, var(--input-focus-color, #2563eb));
+  outline-color: var(--focus-ring, var(--focus-ring-color, #2563eb));
+}
+
+[data-theme="custom"] input:focus,
+[data-theme="custom"] textarea:focus,
+[data-theme="custom"] select:focus {
+  border-color: var(--input-focus);
+  outline-color: var(--focus-ring);
+}
+
+/* Texto secundário e muted */
+.text-secondary:not([style*="color"]),
+[class*="text-gray"]:not([style*="color"]) {
+  color: var(--text-secondary, var(--text-secondary-color, #6b7280));
+}
+
+[data-theme="custom"] .text-secondary,
+[data-theme="custom"] [class*="text-gray"] {
+  color: var(--text-secondary);
+}
+
+.text-muted:not([style*="color"]),
+[class*="text-gray-"]:not([style*="color"]) {
+  color: var(--text-muted, var(--text-muted-color, #9ca3af));
+}
+
+[data-theme="custom"] .text-muted,
+[data-theme="custom"] [class*="text-gray-"] {
+  color: var(--text-muted);
+}
+
+/* Badges */
+.badge-primary:not([style*="background"]):not([class*="bg-"]),
+[class*="badge"][class*="primary"]:not([style*="background"]):not([class*="bg-"]) {
+  background-color: var(--badge-primary, var(--badge-primary-color, #2563eb));
+}
+
+[data-theme="custom"] .badge-primary,
+[data-theme="custom"] [class*="badge"][class*="primary"] {
+  background-color: var(--badge-primary);
+}
+
+.badge-secondary:not([style*="background"]):not([class*="bg-"]),
+[class*="badge"][class*="secondary"]:not([style*="background"]):not([class*="bg-"]) {
+  background-color: var(--badge-secondary, var(--badge-secondary-color, #06b6d4));
+}
+
+[data-theme="custom"] .badge-secondary,
+[data-theme="custom"] [class*="badge"][class*="secondary"] {
+  background-color: var(--badge-secondary);
+}
+
+.badge-success:not([style*="background"]):not([class*="bg-"]),
+[class*="badge"][class*="success"]:not([style*="background"]):not([class*="bg-"]) {
+  background-color: var(--badge-success, var(--badge-success-color, #10b981));
+}
+
+[data-theme="custom"] .badge-success,
+[data-theme="custom"] [class*="badge"][class*="success"] {
+  background-color: var(--badge-success);
+}
+
+.badge-error:not([style*="background"]):not([class*="bg-"]),
+[class*="badge"][class*="error"]:not([style*="background"]):not([class*="bg-"]) {
+  background-color: var(--badge-error, var(--badge-error-color, #ef4444));
+}
+
+[data-theme="custom"] .badge-error,
+[data-theme="custom"] [class*="badge"][class*="error"] {
+  background-color: var(--badge-error);
+}
+
+.badge-warning:not([style*="background"]):not([class*="bg-"]),
+[class*="badge"][class*="warning"]:not([style*="background"]):not([class*="bg-"]) {
+  background-color: var(--badge-warning, var(--badge-warning-color, #f59e0b));
+}
+
+[data-theme="custom"] .badge-warning,
+[data-theme="custom"] [class*="badge"][class*="warning"] {
+  background-color: var(--badge-warning);
 }

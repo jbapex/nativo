@@ -6,7 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 const router = express.Router();
 
 // Obter todas as configurações (público, mas pode filtrar por categoria)
-router.get('/', optionalAuth, (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     let query = 'SELECT * FROM settings WHERE 1=1';
     const params = [];
@@ -18,17 +18,19 @@ router.get('/', optionalAuth, (req, res) => {
 
     query += ' ORDER BY category, key';
 
-    const settings = db.prepare(query).all(...params);
+    const settings = await db.prepare(query).all(...params);
     
     // Converter para objeto chave-valor
     const settingsObj = {};
-    settings.forEach(setting => {
-      settingsObj[setting.key] = {
-        value: setting.value,
-        category: setting.category,
-        description: setting.description
-      };
-    });
+    if (Array.isArray(settings)) {
+      settings.forEach(setting => {
+        settingsObj[setting.key] = {
+          value: setting.value,
+          category: setting.category,
+          description: setting.description
+        };
+      });
+    }
 
     res.json(settingsObj);
   } catch (error) {
@@ -38,9 +40,9 @@ router.get('/', optionalAuth, (req, res) => {
 });
 
 // Obter configuração específica
-router.get('/:key', optionalAuth, (req, res) => {
+router.get('/:key', optionalAuth, async (req, res) => {
   try {
-    const setting = db.prepare('SELECT * FROM settings WHERE key = ?').get(req.params.key);
+    const setting = await db.prepare('SELECT * FROM settings WHERE key = ?').get(req.params.key);
     
     if (!setting) {
       return res.status(404).json({ error: 'Configuração não encontrada' });
@@ -54,7 +56,7 @@ router.get('/:key', optionalAuth, (req, res) => {
 });
 
 // Criar ou atualizar configuração (admin apenas)
-router.post('/', authenticateToken, requireRole('admin'), (req, res) => {
+router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const { key, value, category, description } = req.body;
 
@@ -63,11 +65,11 @@ router.post('/', authenticateToken, requireRole('admin'), (req, res) => {
     }
 
     // Verificar se já existe
-    const existing = db.prepare('SELECT * FROM settings WHERE key = ?').get(key);
+    const existing = await db.prepare('SELECT * FROM settings WHERE key = ?').get(key);
 
     if (existing) {
       // Atualizar
-      db.prepare(`
+      await db.prepare(`
         UPDATE settings 
         SET value = ?, category = ?, description = ?, updated_at = CURRENT_TIMESTAMP
         WHERE key = ?
@@ -80,7 +82,7 @@ router.post('/', authenticateToken, requireRole('admin'), (req, res) => {
     } else {
       // Criar
       const id = uuidv4();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO settings (id, key, value, category, description)
         VALUES (?, ?, ?, ?, ?)
       `).run(
@@ -92,7 +94,7 @@ router.post('/', authenticateToken, requireRole('admin'), (req, res) => {
       );
     }
 
-    const setting = db.prepare('SELECT * FROM settings WHERE key = ?').get(key);
+    const setting = await db.prepare('SELECT * FROM settings WHERE key = ?').get(key);
     res.json(setting);
   } catch (error) {
     console.error('Erro ao salvar configuração:', error);
@@ -101,7 +103,7 @@ router.post('/', authenticateToken, requireRole('admin'), (req, res) => {
 });
 
 // Atualizar múltiplas configurações (admin apenas)
-router.put('/bulk', authenticateToken, requireRole('admin'), (req, res) => {
+router.put('/bulk', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
     const { settings: settingsData } = req.body;
 
@@ -120,38 +122,37 @@ router.put('/bulk', authenticateToken, requireRole('admin'), (req, res) => {
       VALUES (?, ?, ?, ?, ?)
     `);
 
-    const transaction = db.transaction((settingsObj) => {
-      for (const [key, data] of Object.entries(settingsObj)) {
-        const existing = db.prepare('SELECT * FROM settings WHERE key = ?').get(key);
-        
-        if (existing) {
-          updateStmt.run(
-            typeof data === 'object' ? (data.value || '') : data,
-            key
-          );
-        } else {
-          insertStmt.run(
-            uuidv4(),
-            key,
-            typeof data === 'object' ? (data.value || '') : data,
-            typeof data === 'object' ? (data.category || 'general') : 'general',
-            typeof data === 'object' ? (data.description || '') : ''
-          );
-        }
+    // Executar todas as atualizações/inserções
+    for (const [key, data] of Object.entries(settingsData)) {
+      const existing = await db.prepare('SELECT * FROM settings WHERE key = ?').get(key);
+      
+      if (existing) {
+        await updateStmt.run(
+          typeof data === 'object' ? (data.value || '') : data,
+          key
+        );
+      } else {
+        await insertStmt.run(
+          uuidv4(),
+          key,
+          typeof data === 'object' ? (data.value || '') : data,
+          typeof data === 'object' ? (data.category || 'general') : 'general',
+          typeof data === 'object' ? (data.description || '') : ''
+        );
       }
-    });
+    }
 
-    transaction(settingsData);
-
-    const allSettings = db.prepare('SELECT * FROM settings').all();
+    const allSettings = await db.prepare('SELECT * FROM settings').all();
     const settingsObj = {};
-    allSettings.forEach(setting => {
-      settingsObj[setting.key] = {
-        value: setting.value,
-        category: setting.category,
-        description: setting.description
-      };
-    });
+    if (Array.isArray(allSettings)) {
+      allSettings.forEach(setting => {
+        settingsObj[setting.key] = {
+          value: setting.value,
+          category: setting.category,
+          description: setting.description
+        };
+      });
+    }
 
     res.json(settingsObj);
   } catch (error) {
@@ -161,15 +162,15 @@ router.put('/bulk', authenticateToken, requireRole('admin'), (req, res) => {
 });
 
 // Deletar configuração (admin apenas)
-router.delete('/:key', authenticateToken, requireRole('admin'), (req, res) => {
+router.delete('/:key', authenticateToken, requireRole('admin'), async (req, res) => {
   try {
-    const setting = db.prepare('SELECT * FROM settings WHERE key = ?').get(req.params.key);
+    const setting = await db.prepare('SELECT * FROM settings WHERE key = ?').get(req.params.key);
     
     if (!setting) {
       return res.status(404).json({ error: 'Configuração não encontrada' });
     }
 
-    db.prepare('DELETE FROM settings WHERE key = ?').run(req.params.key);
+    await db.prepare('DELETE FROM settings WHERE key = ?').run(req.params.key);
     res.json({ message: 'Configuração deletada com sucesso' });
   } catch (error) {
     console.error('Erro ao deletar configuração:', error);

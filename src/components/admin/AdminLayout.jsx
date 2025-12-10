@@ -12,7 +12,8 @@ import {
   CreditCard,
   Home,
   Package,
-  ArrowLeft
+  ArrowLeft,
+  Megaphone
 } from "lucide-react";
 
 export default function AdminLayout({ children }) {
@@ -55,6 +56,11 @@ export default function AdminLayout({ children }) {
       name: "Assinaturas",
       icon: <Users className="w-5 h-5" />,
       path: createPageUrl("AdminSubscriptions")
+    },
+    {
+      name: "Campanhas",
+      icon: <Megaphone className="w-5 h-5" />,
+      path: createPageUrl("AdminCampaigns")
     },
     {
       name: "Configurações",

@@ -22,6 +22,7 @@ import { ptBR } from "date-fns/locale";
 import { StoreOnlineHeader, StoreOnlineFooter } from "@/components/store/StoreOnlineLayout";
 import { StoreCustomizations } from "@/api/entities";
 import LoginDialog from "@/components/LoginDialog";
+import { formatCurrency } from "@/lib/utils";
 
 export default function StoreOnlineOrders() {
   const { id: storeId } = useParams();
@@ -419,11 +420,11 @@ export default function StoreOnlineOrders() {
                               <div className="flex-1">
                                 <p className="font-medium">{item.product_name || "Produto"}</p>
                                 <p className="text-sm text-gray-600">
-                                  Quantidade: {item.quantity || 1} × R$ {item.price ? parseFloat(item.price).toFixed(2).replace('.', ',') : '0,00'}
+                                  Quantidade: {item.quantity || 1} × {formatCurrency(item.price || 0)}
                                 </p>
                               </div>
                               <p className="font-semibold">
-                                R$ {item.total ? parseFloat(item.total).toFixed(2).replace('.', ',') : '0,00'}
+                                {formatCurrency(item.total || 0)}
                               </p>
                             </div>
                           ))}
@@ -433,7 +434,7 @@ export default function StoreOnlineOrders() {
                     <div className="flex justify-between items-center pt-3 border-t">
                       <span className="font-semibold">Total:</span>
                       <span className="text-xl font-bold" style={{ color: theme?.primary || '#2563eb' }}>
-                        R$ {order.total ? parseFloat(order.total).toFixed(2).replace('.', ',') : '0,00'}
+                        {formatCurrency(order.total || 0)}
                       </span>
                     </div>
                   </div>

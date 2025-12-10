@@ -269,9 +269,8 @@ export default function AdminCities() {
         if (!confirm(`Tem certeza que deseja excluir ${selectedCities.length} cidade(s)?`)) {
           return;
         }
-        for (const cityId of selectedCities) {
-          await City.delete(cityId);
-        }
+        // Usar método de deletar em massa
+        await City.deleteBulk(selectedCities);
         setSuccess(`${selectedCities.length} cidade(s) excluída(s) com sucesso!`);
       }
       

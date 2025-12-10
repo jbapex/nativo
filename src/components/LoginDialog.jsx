@@ -37,9 +37,16 @@ export default function LoginDialog({ open, onOpenChange, onSuccess }) {
       setEmail("");
       setPassword("");
       setSuccess("Login realizado com sucesso!");
+      
+      // Disparar evento de mudança de autenticação antes de fechar o dialog
+      window.dispatchEvent(new Event('authChanged'));
+      
       setTimeout(() => {
         onSuccess?.();
         onOpenChange(false);
+        // Disparar evento novamente após fechar para garantir que todos os componentes sejam atualizados
+        window.dispatchEvent(new Event('authChanged'));
+        window.location.reload();
       }, 500);
     } catch (err) {
       setError(err.message || "Erro ao fazer login. Verifique suas credenciais.");
@@ -67,9 +74,16 @@ export default function LoginDialog({ open, onOpenChange, onSuccess }) {
       setFullName("");
       setPhone("");
       setSuccess("Conta criada com sucesso! Você já está logado.");
+      
+      // Disparar evento de mudança de autenticação antes de fechar o dialog
+      window.dispatchEvent(new Event('authChanged'));
+      
       setTimeout(() => {
         onSuccess?.();
         onOpenChange(false);
+        // Disparar evento novamente após fechar para garantir que todos os componentes sejam atualizados
+        window.dispatchEvent(new Event('authChanged'));
+        window.location.reload();
       }, 1500);
     } catch (err) {
       setError(err.message || "Erro ao criar conta. Tente novamente.");
@@ -94,6 +108,7 @@ export default function LoginDialog({ open, onOpenChange, onSuccess }) {
           setTimeout(() => {
             onSuccess?.();
             onOpenChange(false);
+            window.location.reload();
           }, 500);
         } catch (err) {
           setError(err.message || "Erro ao fazer login com Google. Tente novamente.");

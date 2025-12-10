@@ -19,10 +19,8 @@ import {
   Heart, 
   Gift, 
   Tag, 
-  Send, 
   Copy, 
   CheckCircle, 
-  AlertCircle,
   Instagram,
   Facebook,
   Twitter,
@@ -35,7 +33,6 @@ import {
 
 export default function StoreMarketing({ store = {}, products = [] }) {
   const [activeTab, setActiveTab] = useState("promos");
-  const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState("");
@@ -53,29 +50,22 @@ export default function StoreMarketing({ store = {}, products = [] }) {
     startTime: "00:00",
     endDate: "",
     endTime: "23:59",
-    showTimer: false,
-    active: true
+    active: true,
+    appliesTo: "both" // "store", "marketplace", "both"
   });
   
-  const [messageData, setMessageData] = useState({
-    title: "Novidades da nossa loja",
-    message: "Olá! Temos novos produtos que podem te interessar. Confira em nossa loja NATIVO.",
-    audience: "all",
-    includeImage: true,
-    selectedProducts: [], // Novo campo para produtos selecionados
-    messageType: "promotional" // Novo campo para tipo de mensagem
-  });
 
-  const [selectedProducts, setSelectedProducts] = useState([]);
-  const [estimatedReach, setEstimatedReach] = useState(0);
+  // Gerar URLs da loja
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://nativo.com.br';
+  const storeUrl = store?.id ? `${baseUrl}/store/${store.id}` : "";
+  const customStoreUrl = store?.slug ? `${baseUrl}/${store.slug}` : null;
+  const [copiedUrl, setCopiedUrl] = useState(null);
 
-  const storeUrl = store?.id ? `https://nativo.com.br/store/${store.id}` : "";
-
-  const handleCopyUrl = () => {
-    if (storeUrl) {
-      navigator.clipboard.writeText(storeUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+  const handleCopyUrl = (url) => {
+    if (url) {
+      navigator.clipboard.writeText(url);
+      setCopiedUrl(url);
+      setTimeout(() => setCopiedUrl(null), 2000);
     }
   };
   
@@ -102,20 +92,34 @@ export default function StoreMarketing({ store = {}, products = [] }) {
         throw new Error("A data de término deve ser posterior à data de início");
       }
       
+      // Validar e converter discount_value
+      let discountValue = null;
+      if (promoData.discountType !== "free_shipping") {
+        const parsed = parseFloat(promoData.discountValue);
+        if (isNaN(parsed) || parsed <= 0) {
+          throw new Error("O valor do desconto deve ser um número maior que zero");
+        }
+        discountValue = parsed;
+      }
+      
       const promotionData = {
         title: promoData.title.trim(),
         description: promoData.description || null,
         discount_type: promoData.discountType,
-        discount_value: promoData.discountType !== "free_shipping" ? parseFloat(promoData.discountValue) : null,
+        discount_value: discountValue,
         product_id: promoData.productId && promoData.productId !== "all" ? promoData.productId : "all",
         start_date: `${promoData.startDate}T${promoData.startTime}:00`,
         end_date: `${promoData.endDate}T${promoData.endTime}:59`,
-        show_timer: promoData.showTimer || false,
-        active: promoData.active
+        show_timer: true, // Sempre ativo - regra oficial
+        active: promoData.active === true || promoData.active === 1,
+        applies_to: promoData.appliesTo || "both" // "store", "marketplace", "both"
       };
+
+      console.log('📝 Dados da promoção sendo enviados:', promotionData);
 
       if (editingPromo) {
         // Atualizar promoção existente
+        console.log('🔄 Atualizando promoção:', editingPromo.id);
         await Promotions.update(editingPromo.id, promotionData);
         toast({
           title: "Sucesso",
@@ -123,7 +127,9 @@ export default function StoreMarketing({ store = {}, products = [] }) {
         });
       } else {
         // Criar nova promoção
-        await Promotions.create(promotionData);
+        console.log('➕ Criando nova promoção');
+        const created = await Promotions.create(promotionData);
+        console.log('✅ Promoção criada:', created);
         toast({
           title: "Sucesso",
           description: "Promoção criada com sucesso!",
@@ -146,76 +152,41 @@ export default function StoreMarketing({ store = {}, products = [] }) {
           startTime: "00:00",
           endDate: "",
           endTime: "23:59",
-          showTimer: false,
-          active: true
+          active: true,
+          appliesTo: "both"
         });
         loadPromotions();
       }, 1000);
       
     } catch (error) {
-      console.error("Erro ao salvar promoção:", error);
-      setError(error.message || "Erro ao salvar promoção");
+      console.error("❌ Erro ao salvar promoção:", error);
+      console.error("Detalhes do erro:", error.details || error.response?.data);
+      
+      // Extrair mensagem de erro mais detalhada
+      let errorMessage = error.message || "Erro ao salvar promoção";
+      
+      if (error.details) {
+        if (typeof error.details === 'string') {
+          errorMessage = error.details;
+        } else if (error.details.details) {
+          errorMessage = error.details.details;
+        } else if (error.details.error) {
+          errorMessage = error.details.error;
+        }
+      } else if (error.response?.data) {
+        if (error.response.data.details) {
+          errorMessage = error.response.data.details;
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error;
+        }
+      }
+      
+      setError(errorMessage);
       toast({
         title: "Erro",
-        description: error.message || "Erro ao salvar promoção",
+        description: errorMessage,
         variant: "destructive"
       });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-  
-  const handleMessageSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setError("");
-    
-    try {
-      // Validações
-      if (!messageData.title.trim() || !messageData.message.trim()) {
-        throw new Error("Preencha o título e a mensagem");
-      }
-
-      if (messageData.message.length > 500) {
-        throw new Error("A mensagem deve ter no máximo 500 caracteres");
-      }
-
-      // Calcula o público estimado
-      let estimatedAudience = 0;
-      switch (messageData.audience) {
-        case "all":
-          estimatedAudience = store.total_followers || 0;
-          break;
-        case "favorites":
-          estimatedAudience = store.total_favorites || 0;
-          break;
-        case "contacted":
-          estimatedAudience = store.total_messages || 0;
-          break;
-        case "recent":
-          estimatedAudience = Math.floor((store.total_views || 0) * 0.1); // 10% dos visitantes recentes
-          break;
-      }
-
-      // Simula o envio (aqui você implementaria a integração real)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      setSuccess(true);
-      setTimeout(() => {
-        setSuccess(false);
-        setMessageData({
-          title: "",
-          message: "",
-          audience: "all",
-          includeImage: true,
-          selectedProducts: [],
-          messageType: "promotional"
-        });
-      }, 3000);
-
-    } catch (error) {
-      console.error("Erro ao enviar mensagem:", error);
-      setError(error.message);
     } finally {
       setSubmitting(false);
     }
@@ -229,20 +200,32 @@ export default function StoreMarketing({ store = {}, products = [] }) {
   const handleSwitchChange = (name, checked) => {
     setPromoData(prev => ({ ...prev, [name]: checked }));
   };
-  
-  const handleMessageChange = (e) => {
-    const { name, value } = e.target;
-    setMessageData(prev => ({ ...prev, [name]: value }));
-  };
 
   // Carregar promoções
   const loadPromotions = async () => {
     try {
       setLoadingPromotions(true);
+      console.log('📋 Carregando promoções...');
       const data = await Promotions.list();
-      setPromotions(data || []);
+      console.log('✅ Promoções carregadas:', data);
+      
+      // Garantir que é um array
+      if (Array.isArray(data)) {
+        setPromotions(data);
+      } else if (data && Array.isArray(data.data)) {
+        // Se vier com paginação
+        setPromotions(data.data);
+      } else {
+        setPromotions([]);
+      }
     } catch (error) {
-      console.error('Erro ao carregar promoções:', error);
+      console.error('❌ Erro ao carregar promoções:', error);
+      setPromotions([]);
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao carregar promoções",
+        variant: "destructive"
+      });
     } finally {
       setLoadingPromotions(false);
     }
@@ -277,8 +260,8 @@ export default function StoreMarketing({ store = {}, products = [] }) {
       startTime: formatTime(startDateTime),
       endDate: promo.end_date ? promo.end_date.split('T')[0] : "",
       endTime: formatTime(endDateTime),
-      showTimer: promo.show_timer === true || promo.show_timer === 1,
-      active: promo.active !== false
+      active: promo.active !== false,
+      appliesTo: promo.applies_to || "both"
     });
   };
 
@@ -330,10 +313,6 @@ export default function StoreMarketing({ store = {}, products = [] }) {
           <TabsTrigger value="promos" className="flex items-center gap-2">
             <Gift className="w-4 h-4" />
             Promoções
-          </TabsTrigger>
-          <TabsTrigger value="messaging" className="flex items-center gap-2">
-            <MessageSquare className="w-4 h-4" />
-            Mensagens
           </TabsTrigger>
           <TabsTrigger value="share" className="flex items-center gap-2">
             <Share2 className="w-4 h-4" />
@@ -435,6 +414,28 @@ export default function StoreMarketing({ store = {}, products = [] }) {
                         </Select>
                       </div>
 
+                      <div className="space-y-2">
+                        <Label htmlFor="appliesTo">Onde vale esta promoção</Label>
+                        <Select 
+                          value={promoData.appliesTo}
+                          onValueChange={(value) => setPromoData(prev => ({ ...prev, appliesTo: value }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione onde vale" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="store">Minha Loja</SelectItem>
+                            <SelectItem value="marketplace">Nativo (Marketplace)</SelectItem>
+                            <SelectItem value="both">Ambos (Minha Loja e Nativo)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <p className="text-sm text-gray-500">
+                          {promoData.appliesTo === "store" && "A promoção será exibida apenas na sua loja online"}
+                          {promoData.appliesTo === "marketplace" && "A promoção será exibida apenas no marketplace NATIVO"}
+                          {promoData.appliesTo === "both" && "A promoção será exibida tanto na sua loja quanto no marketplace NATIVO"}
+                        </p>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="startDate">Data de Início</Label>
@@ -485,20 +486,6 @@ export default function StoreMarketing({ store = {}, products = [] }) {
                         </div>
                       </div>
                       
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        <div className="space-y-0.5">
-                          <Label htmlFor="showTimer">Exibir Temporizador de Oferta</Label>
-                          <p className="text-sm text-gray-500">
-                            Mostra um contador regressivo nos produtos com esta promoção
-                          </p>
-                        </div>
-                        <Switch
-                          id="showTimer"
-                          checked={promoData.showTimer}
-                          onCheckedChange={(checked) => handleSwitchChange("showTimer", checked)}
-                        />
-                      </div>
-                      
                       <div className="flex items-center justify-between pt-2">
                         <div className="space-y-0.5">
                           <Label htmlFor="active">Ativar Promoção</Label>
@@ -545,7 +532,9 @@ export default function StoreMarketing({ store = {}, products = [] }) {
                               discountValue: "",
                               productId: "",
                               startDate: "",
+                              startTime: "00:00",
                               endDate: "",
+                              endTime: "23:59",
                               active: true
                             });
                           }}
@@ -612,12 +601,20 @@ export default function StoreMarketing({ store = {}, products = [] }) {
                                   <div className="flex items-center gap-1">
                                     <Tag className="w-4 h-4" />
                                     {promo.discount_type === "percentage" && `${promo.discount_value}% OFF`}
-                                    {promo.discount_type === "fixed" && `R$ ${promo.discount_value} OFF`}
+                                    {promo.discount_type === "fixed" && `R$ ${Number(promo.discount_value).toFixed(2).replace('.', ',')} OFF`}
                                     {promo.discount_type === "free_shipping" && "Frete Grátis"}
                                   </div>
                                   <div className="flex items-center gap-1">
                                     <Calendar className="w-4 h-4" />
-                                    {new Date(promo.start_date).toLocaleDateString('pt-BR')} - {new Date(promo.end_date).toLocaleDateString('pt-BR')}
+                                    {new Date(promo.start_date).toLocaleDateString('pt-BR', { 
+                                      day: '2-digit', 
+                                      month: '2-digit', 
+                                      year: 'numeric' 
+                                    })} - {new Date(promo.end_date).toLocaleDateString('pt-BR', { 
+                                      day: '2-digit', 
+                                      month: '2-digit', 
+                                      year: 'numeric' 
+                                    })}
                                   </div>
                                   {promo.product_name ? (
                                     <div className="flex items-center gap-1">
@@ -630,6 +627,18 @@ export default function StoreMarketing({ store = {}, products = [] }) {
                                       Todos os produtos
                                     </div>
                                   )}
+                                  <div className="flex items-center gap-1">
+                                    <Clock className="w-4 h-4" />
+                                    <span className="text-blue-600 font-medium">Temporizador ativo</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Megaphone className="w-4 h-4" />
+                                    <span className="font-medium text-blue-600">
+                                      {promo.applies_to === "store" && "Válida apenas na Minha Loja"}
+                                      {promo.applies_to === "marketplace" && "Válida apenas no Nativo"}
+                                      {(promo.applies_to === "both" || !promo.applies_to) && "Válida em Minha Loja e Nativo"}
+                                    </span>
+                                  </div>
                                 </div>
                               </div>
                               
@@ -713,205 +722,6 @@ export default function StoreMarketing({ store = {}, products = [] }) {
           </div>
         </TabsContent>
         
-        {/* Aba de Mensagens */}
-        <TabsContent value="messaging">
-          <Card>
-            <CardHeader>
-              <CardTitle>Mensagens em Massa</CardTitle>
-              <CardDescription>
-                Envie mensagens para clientes que já interagiram com sua loja
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleMessageSubmit}>
-                <div className="space-y-6">
-                  <div className="space-y-2">
-                    <Label>Tipo de Mensagem</Label>
-                    <Select 
-                      value={messageData.messageType}
-                      onValueChange={(value) => setMessageData(prev => ({ ...prev, messageType: value }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="promotional">Promoção</SelectItem>
-                        <SelectItem value="news">Novidades</SelectItem>
-                        <SelectItem value="event">Evento</SelectItem>
-                        <SelectItem value="announcement">Comunicado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="title">Título da Mensagem</Label>
-                    <Input 
-                      id="title" 
-                      name="title"
-                      value={messageData.title}
-                      onChange={handleMessageChange}
-                      placeholder="Título que aparecerá na notificação"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="message">Mensagem</Label>
-                    <Textarea 
-                      id="message" 
-                      name="message"
-                      value={messageData.message}
-                      onChange={handleMessageChange}
-                      placeholder="O conteúdo da sua mensagem para os clientes"
-                      rows={4}
-                      required
-                    />
-                    <p className="text-sm text-gray-500">
-                      {messageData.message.length}/500 caracteres
-                    </p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="products">Produto Relacionado (opcional)</Label>
-                    <Select 
-                      value={messageData.selectedProducts?.[0] || "none"}
-                      onValueChange={(value) => setMessageData(prev => ({ 
-                        ...prev, 
-                        selectedProducts: value && value !== "none" ? [value] : []
-                      }))}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um produto para destacar" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhum produto</SelectItem>
-                        {products.map(product => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-sm text-gray-500">
-                      O produto selecionado aparecerá junto com a mensagem
-                    </p>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="audience">Público-alvo</Label>
-                    <Select 
-                      value={messageData.audience}
-                      onValueChange={(value) => {
-                        setMessageData(prev => ({ ...prev, audience: value }));
-                        // Atualiza alcance estimado
-                        let reach = 0;
-                        switch (value) {
-                          case "all":
-                            reach = store.total_followers || 0;
-                            break;
-                          case "favorites":
-                            reach = store.total_favorites || 0;
-                            break;
-                          case "contacted":
-                            reach = store.total_messages || 0;
-                            break;
-                          case "recent":
-                            reach = Math.floor((store.total_views || 0) * 0.1);
-                            break;
-                        }
-                        setEstimatedReach(reach);
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o público" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Todos os seguidores</SelectItem>
-                        <SelectItem value="favorites">Quem favoritou seus produtos</SelectItem>
-                        <SelectItem value="contacted">Quem já entrou em contato</SelectItem>
-                        <SelectItem value="recent">Visitantes recentes (7 dias)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {estimatedReach > 0 && (
-                      <p className="text-sm text-blue-600">
-                        Alcance estimado: {estimatedReach} pessoas
-                      </p>
-                    )}
-                  </div>
-                  
-                  <div className="flex items-center justify-between pt-2">
-                    <div className="space-y-0.5">
-                      <Label htmlFor="includeImage">Incluir imagem da loja</Label>
-                      <p className="text-sm text-gray-500">
-                        Adiciona o logo da sua loja na mensagem
-                      </p>
-                    </div>
-                    <Switch
-                      id="includeImage"
-                      checked={messageData.includeImage}
-                      onCheckedChange={(checked) => setMessageData(prev => ({ ...prev, includeImage: checked }))}
-                    />
-                  </div>
-
-                  <div className="bg-blue-50 p-4 rounded-lg">
-                    <h3 className="text-lg font-medium text-blue-800 mb-2">Dicas para Mensagens Efetivas</h3>
-                    <ul className="space-y-2 text-sm text-blue-700">
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-500">•</span>
-                        Seja direto e específico no seu comunicado
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-500">•</span>
-                        Inclua uma chamada para ação clara
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-500">•</span>
-                        Personalize a mensagem para o público selecionado
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-500">•</span>
-                        Evite usar muitos emojis ou caracteres especiais
-                      </li>
-                    </ul>
-                  </div>
-                </div>
-                
-                <div className="mt-6">
-                  <Button 
-                    type="submit" 
-                    className="w-full bg-blue-600 hover:bg-blue-700"
-                    disabled={submitting}
-                  >
-                    {submitting ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                        Enviando...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="w-4 h-4 mr-2" />
-                        Enviar Mensagem
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
-              
-              <div className="mt-8 bg-yellow-50 p-4 rounded-lg">
-                <h3 className="flex items-center gap-2 text-amber-800 font-medium">
-                  <AlertCircle className="w-5 h-5" />
-                  Importante
-                </h3>
-                <p className="text-sm text-amber-700 mt-2">
-                  Use este recurso com moderação. Enviar muitas mensagens pode 
-                  ser considerado spam e afastar clientes. Recomendamos no máximo 
-                  uma mensagem por semana.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
         {/* Aba de Compartilhamento */}
         <TabsContent value="share">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -923,8 +733,49 @@ export default function StoreMarketing({ store = {}, products = [] }) {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Link Personalizado (se disponível) */}
+                {customStoreUrl && (
+                  <div className="space-y-2">
+                    <Label>Link Personalizado da sua loja</Label>
+                    <p className="text-sm text-gray-500 mb-2">
+                      Link curto e personalizado para compartilhar
+                    </p>
+                    <div className="flex">
+                      <Input 
+                        value={customStoreUrl}
+                        readOnly
+                        className="rounded-r-none"
+                      />
+                      <Button 
+                        type="button" 
+                        onClick={() => handleCopyUrl(customStoreUrl)}
+                        className="rounded-l-none"
+                        variant={copiedUrl === customStoreUrl ? "success" : "default"}
+                      >
+                        {copiedUrl === customStoreUrl ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-2" />
+                            Copiado
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 mr-2" />
+                            Copiar
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Link Padrão */}
                 <div className="space-y-2">
                   <Label>Link da sua loja</Label>
+                  {customStoreUrl && (
+                    <p className="text-sm text-gray-500 mb-2">
+                      Link padrão (sempre disponível)
+                    </p>
+                  )}
                   <div className="flex">
                     <Input 
                       value={storeUrl}
@@ -933,11 +784,11 @@ export default function StoreMarketing({ store = {}, products = [] }) {
                     />
                     <Button 
                       type="button" 
-                      onClick={handleCopyUrl}
+                      onClick={() => handleCopyUrl(storeUrl)}
                       className="rounded-l-none"
-                      variant={copied ? "success" : "default"}
+                      variant={copiedUrl === storeUrl ? "success" : "default"}
                     >
-                      {copied ? (
+                      {copiedUrl === storeUrl ? (
                         <>
                           <CheckCircle className="w-4 h-4 mr-2" />
                           Copiado
@@ -976,19 +827,46 @@ export default function StoreMarketing({ store = {}, products = [] }) {
                 
                 <div className="pt-2">
                   <Label className="mb-3 block">QR Code da sua Loja</Label>
-                  <div className="bg-white p-4 border rounded-lg inline-block">
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(storeUrl)}`}
-                      alt="QR Code da Loja"
-                      className="w-32 h-32"
-                    />
+                  <div className="space-y-4">
+                    {/* QR Code do link personalizado (se disponível) */}
+                    {customStoreUrl && (
+                      <div>
+                        <p className="text-sm font-medium text-gray-700 mb-2">Link Personalizado</p>
+                        <div className="bg-white p-4 border rounded-lg inline-block">
+                          <img 
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(customStoreUrl)}`}
+                            alt="QR Code do Link Personalizado"
+                            className="w-32 h-32"
+                          />
+                        </div>
+                        <p className="text-sm text-gray-500 mt-2">
+                          QR Code do link personalizado: {customStoreUrl}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {/* QR Code do link padrão */}
+                    <div>
+                      {customStoreUrl && (
+                        <p className="text-sm font-medium text-gray-700 mb-2">Link Padrão</p>
+                      )}
+                      <div className="bg-white p-4 border rounded-lg inline-block">
+                        <img 
+                          src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(storeUrl)}`}
+                          alt="QR Code da Loja"
+                          className="w-32 h-32"
+                        />
+                      </div>
+                      <p className="text-sm text-gray-500 mt-2">
+                        {customStoreUrl 
+                          ? `QR Code do link padrão: ${storeUrl}`
+                          : `Baixe este QR Code e use em seus materiais impressos, cartões de visita, banners, etc.`
+                        }
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-sm text-gray-500 mt-2">
-                    Baixe este QR Code e use em seus materiais impressos, 
-                    cartões de visita, banners, etc.
-                  </p>
                   <Button variant="outline" className="mt-2">
-                    Baixar QR Code
+                    Baixar QR Code{customStoreUrl ? 's' : ''}
                   </Button>
                 </div>
               </CardContent>

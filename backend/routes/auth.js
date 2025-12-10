@@ -28,7 +28,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
       return res.status(400).json({ error: 'Email e senha são obrigatórios' });
     }
 
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    const user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
 
     if (!user) {
       return res.status(401).json({ error: 'Credenciais inválidas' });
@@ -41,7 +41,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
     }
 
     // Atualizar last_login
-    db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
+    await db.prepare('UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(user.id);
     
     // Gerar access token (curta duração)
     const accessToken = jwt.sign(
@@ -63,7 +63,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 dias
 
     // Salvar refresh token no banco
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO refresh_tokens (id, user_id, token, expires_at)
       VALUES (?, ?, ?, ?)
     `).run(refreshTokenId, user.id, refreshToken, expiresAt.toISOString());
@@ -96,7 +96,7 @@ router.post('/register', validate(userSchema), async (req, res) => {
     }
 
     // Verificar se email já existe
-    const existingUser = db.prepare('SELECT id FROM users WHERE email = ?').get(email);
+    const existingUser = await db.prepare('SELECT id FROM users WHERE email = ?').get(email);
     if (existingUser) {
       return res.status(400).json({ error: 'Email já cadastrado' });
     }
@@ -107,12 +107,12 @@ router.post('/register', validate(userSchema), async (req, res) => {
     // Status padrão: 'active' para customer, 'pending' para store
     const defaultStatus = role === 'customer' ? 'active' : 'pending';
 
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO users (id, email, password_hash, full_name, phone, role, status)
       VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(id, email, passwordHash, full_name, phone || null, role, defaultStatus);
 
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
 
     // Gerar access token (curta duração)
     const accessToken = jwt.sign(
@@ -134,7 +134,7 @@ router.post('/register', validate(userSchema), async (req, res) => {
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 dias
 
     // Salvar refresh token no banco
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO refresh_tokens (id, user_id, token, expires_at)
       VALUES (?, ?, ?, ?)
     `).run(refreshTokenId, user.id, refreshToken, expiresAt.toISOString());
@@ -154,10 +154,10 @@ router.post('/register', validate(userSchema), async (req, res) => {
 });
 
 // Obter usuário atual
-router.get('/me', authenticateToken, (req, res) => {
+router.get('/me', authenticateToken, async (req, res) => {
   try {
     // Buscar usuário (excluindo password_hash)
-    const user = db.prepare(`
+    const user = await db.prepare(`
       SELECT id, email, full_name, role, status, phone, avatar, cpf, birth_date, 
              created_at, updated_at, last_login 
       FROM users 
@@ -169,7 +169,7 @@ router.get('/me', authenticateToken, (req, res) => {
     }
 
     // Buscar endereços do usuário
-    const addresses = db.prepare(`
+    const addresses = await db.prepare(`
       SELECT * FROM user_addresses 
       WHERE user_id = ? 
       ORDER BY is_default DESC, created_at DESC
@@ -243,13 +243,13 @@ router.put('/me', authenticateToken, async (req, res) => {
     updates.push('updated_at = CURRENT_TIMESTAMP');
     values.push(req.user.id);
 
-    db.prepare(`
+    await db.prepare(`
       UPDATE users 
       SET ${updates.join(', ')}
       WHERE id = ?
     `).run(...values);
 
-    const user = db.prepare(`
+    const user = await db.prepare(`
       SELECT id, email, full_name, role, status, phone, avatar, cpf, birth_date, 
              created_at, updated_at, last_login 
       FROM users 
@@ -257,7 +257,7 @@ router.put('/me', authenticateToken, async (req, res) => {
     `).get(req.user.id);
     
     // Buscar endereços
-    const addresses = db.prepare(`
+    const addresses = await db.prepare(`
       SELECT * FROM user_addresses 
       WHERE user_id = ? 
       ORDER BY is_default DESC, created_at DESC
@@ -304,21 +304,21 @@ router.post('/google', async (req, res) => {
     }
 
     // Verificar se usuário já existe
-    let user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
+    let user = await db.prepare('SELECT * FROM users WHERE email = ?').get(email);
 
     if (!user) {
       // Criar novo usuário
       const id = uuidv4();
-      db.prepare(`
+      await db.prepare(`
         INSERT INTO users (id, email, full_name, role, status, password_hash)
         VALUES (?, ?, ?, 'user', 'approved', NULL)
       `).run(id, email, name || email.split('@')[0]);
 
-      user = db.prepare('SELECT * FROM users WHERE id = ?').get(id);
+      user = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
     } else {
       // Atualizar nome se necessário
       if (name && name !== user.full_name) {
-        db.prepare('UPDATE users SET full_name = ? WHERE id = ?').run(name, user.id);
+        await db.prepare('UPDATE users SET full_name = ? WHERE id = ?').run(name, user.id);
         user.full_name = name;
       }
     }
@@ -343,7 +343,7 @@ router.post('/google', async (req, res) => {
     expiresAt.setDate(expiresAt.getDate() + 30); // 30 dias
 
     // Salvar refresh token no banco
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO refresh_tokens (id, user_id, token, expires_at)
       VALUES (?, ?, ?, ?)
     `).run(refreshTokenId, user.id, refreshToken, expiresAt.toISOString());
@@ -392,7 +392,7 @@ router.post('/refresh', async (req, res) => {
     }
 
     // Verificar se o token existe no banco e não foi revogado
-    const tokenRecord = db.prepare(`
+    const tokenRecord = await db.prepare(`
       SELECT * FROM refresh_tokens 
       WHERE id = ? AND revoked = 0 AND expires_at > CURRENT_TIMESTAMP
     `).get(decoded.tokenId);
@@ -402,7 +402,7 @@ router.post('/refresh', async (req, res) => {
     }
 
     // Buscar usuário
-    const user = db.prepare('SELECT * FROM users WHERE id = ?').get(decoded.id);
+    const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(decoded.id);
     if (!user) {
       return res.status(404).json({ error: 'Usuário não encontrado' });
     }
@@ -433,7 +433,7 @@ router.post('/logout', authenticateToken, async (req, res) => {
       try {
         const decoded = jwt.verify(refreshToken, JWT_REFRESH_SECRET);
         if (decoded.type === 'refresh' && decoded.tokenId) {
-          db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE id = ?').run(decoded.tokenId);
+          await db.prepare('UPDATE refresh_tokens SET revoked = 1 WHERE id = ?').run(decoded.tokenId);
         }
       } catch (error) {
         // Ignorar erros de verificação

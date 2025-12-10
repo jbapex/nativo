@@ -8,39 +8,119 @@ import { createNotification } from './notifications.js';
 
 const router = express.Router();
 
+let promotionsSchemaSupportsProductId = null;
+
+function isMissingColumnError(error) {
+  if (!error) return false;
+  if (error.code === '42703') {
+    return true;
+  }
+  if (error.code === 'SQLITE_ERROR' && /no such column/i.test(error.message || '')) {
+    return true;
+  }
+  return /no such column/i.test(error.message || '');
+}
+
+async function hasPromotionProductIdColumn(dbInstance) {
+  if (promotionsSchemaSupportsProductId !== null) {
+    return promotionsSchemaSupportsProductId;
+  }
+  try {
+    await dbInstance.prepare('SELECT product_id FROM promotions LIMIT 1').get();
+    promotionsSchemaSupportsProductId = true;
+  } catch (error) {
+    if (isMissingColumnError(error)) {
+      promotionsSchemaSupportsProductId = false;
+    } else {
+      console.error('Erro ao verificar coluna product_id em promotions:', error);
+      promotionsSchemaSupportsProductId = false;
+    }
+  }
+  return promotionsSchemaSupportsProductId;
+}
+
+function extractPromotionProductIds(promotion) {
+  if (!promotion) return [];
+  if (promotion.product_id) {
+    return [promotion.product_id];
+  }
+  const { product_ids: rawIds } = promotion;
+  if (!rawIds) return [];
+  if (Array.isArray(rawIds)) {
+    return rawIds.filter(Boolean);
+  }
+  if (typeof rawIds === 'string') {
+    try {
+      const parsed = JSON.parse(rawIds);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(Boolean);
+      }
+    } catch (_) {
+      return rawIds
+        .split(',')
+        .map(id => id.trim())
+        .filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function findPromotionForProduct(promotions = [], productId) {
+  const specific = promotions.find(promo => {
+    const ids = extractPromotionProductIds(promo);
+    return ids.length > 0 && ids.includes(productId);
+  });
+  if (specific) return specific;
+  return promotions.find(promo => extractPromotionProductIds(promo).length === 0) || null;
+}
+
 // Função auxiliar para calcular preço com desconto baseado em promoções
-function calculateProductPriceWithPromotion(product, db) {
+async function calculateProductPriceWithPromotion(product, db) {
   const now = new Date().toISOString();
-  
-  // Buscar promoções ativas para o produto
-  // Prioridade: promoção específica do produto > promoção geral da loja
-  const specificPromo = db.prepare(`
-    SELECT * FROM promotions
-    WHERE store_id = ?
-      AND product_id = ?
-      AND active = 1
-      AND start_date <= ?
-      AND end_date >= ?
-    ORDER BY created_at DESC
-    LIMIT 1
-  `).get(product.store_id, product.id, now, now);
-  
-  let promotion = specificPromo;
-  
-  // Se não tiver promoção específica, buscar promoção geral da loja
-  if (!promotion) {
-    promotion = db.prepare(`
+
+  const schemaHasProductId = await hasPromotionProductIdColumn(db);
+  let promotion = null;
+
+  if (schemaHasProductId) {
+    const specificPromo = await db.prepare(`
       SELECT * FROM promotions
       WHERE store_id = ?
-        AND product_id IS NULL
-        AND active = 1
+        AND product_id = ?
+        AND active = true
         AND start_date <= ?
         AND end_date >= ?
       ORDER BY created_at DESC
       LIMIT 1
-    `).get(product.store_id, now, now);
+    `).get(product.store_id, product.id, now, now);
+
+    promotion = specificPromo;
+
+    if (!promotion) {
+      promotion = await db.prepare(`
+        SELECT * FROM promotions
+        WHERE store_id = ?
+          AND product_id IS NULL
+          AND active = true
+          AND start_date <= ?
+          AND end_date >= ?
+        ORDER BY created_at DESC
+        LIMIT 1
+      `).get(product.store_id, now, now);
+    }
+  } else {
+    const promotions = await db.prepare(`
+      SELECT *
+      FROM promotions
+      WHERE store_id = ?
+        AND active = true
+        AND start_date <= ?
+        AND end_date >= ?
+      ORDER BY created_at DESC
+    `).all(product.store_id, now, now);
+
+    promotion = findPromotionForProduct(promotions, product.id);
   }
-  
+
   // Se não tiver promoção, retornar preço original
   if (!promotion) {
     return {
@@ -156,43 +236,50 @@ function calculateCRC16(data) {
 }
 
 // Obter carrinho do usuário (agrupado por loja)
-router.get('/', authenticateToken, (req, res) => {
+router.get('/', authenticateToken, async (req, res) => {
   try {
     // Buscar ou criar carrinho
-    let cart = db.prepare('SELECT * FROM cart WHERE user_id = ?').get(req.user.id);
+    let cart = await db.prepare('SELECT * FROM cart WHERE user_id = ?').get(req.user.id);
     
     if (!cart) {
       const cartId = uuidv4();
-      db.prepare('INSERT INTO cart (id, user_id) VALUES (?, ?)').run(cartId, req.user.id);
+      await db.prepare('INSERT INTO cart (id, user_id) VALUES (?, ?)').run(cartId, req.user.id);
       cart = { id: cartId, user_id: req.user.id };
     }
     
     // Buscar itens do carrinho com informações do produto e loja
-    const items = db.prepare(`
+    const items = await db.prepare(`
       SELECT 
-        ci.*,
+        ci.id,
+        ci.product_id,
+        ci.quantity,
+        ci.created_at,
+        ci.updated_at,
         p.name as product_name,
         p.price as product_price,
         p.images as product_images,
         p.stock as product_stock,
         p.active as product_active,
+        p.store_id as product_store_id,
         s.name as store_name,
         s.whatsapp as store_whatsapp,
         s.logo as store_logo,
         s.checkout_enabled as store_checkout_enabled
       FROM cart_items ci
       LEFT JOIN products p ON ci.product_id = p.id
-      LEFT JOIN stores s ON ci.store_id = s.id
-      WHERE ci.cart_id = ?
-      ORDER BY ci.store_id, ci.created_at
-    `).all(cart.id);
+      LEFT JOIN stores s ON p.store_id = s.id
+      WHERE ci.user_id = ?
+      ORDER BY p.store_id, ci.created_at
+    `).all(req.user.id);
     
     // Agrupar itens por loja
     const itemsByStore = {};
-    items.forEach(item => {
-      if (!itemsByStore[item.store_id]) {
-        itemsByStore[item.store_id] = {
-          store_id: item.store_id,
+    for (const item of items) {
+      const storeId = item.product_store_id;
+      
+      if (!itemsByStore[storeId]) {
+        itemsByStore[storeId] = {
+          store_id: storeId,
           store_name: item.store_name,
           store_whatsapp: item.store_whatsapp,
           store_logo: item.store_logo,
@@ -202,14 +289,14 @@ router.get('/', authenticateToken, (req, res) => {
       }
       
       // Buscar produto completo para calcular preço com promoção
-      const fullProduct = db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
-      const priceInfo = fullProduct ? calculateProductPriceWithPromotion(fullProduct, db) : {
+      const fullProduct = await db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
+      const priceInfo = fullProduct ? await calculateProductPriceWithPromotion(fullProduct, db) : {
         finalPrice: parseFloat(item.product_price),
         originalPrice: parseFloat(item.product_price),
         hasPromotion: false
       };
       
-      itemsByStore[item.store_id].items.push({
+      itemsByStore[storeId].items.push({
         id: item.id,
         product_id: item.product_id,
         product_name: item.product_name,
@@ -222,7 +309,7 @@ router.get('/', authenticateToken, (req, res) => {
         subtotal: priceInfo.finalPrice * item.quantity,
         has_promotion: priceInfo.hasPromotion
       });
-    });
+    }
     
     // Calcular totais por loja
     const stores = Object.values(itemsByStore).map(store => {
@@ -251,7 +338,7 @@ router.get('/', authenticateToken, (req, res) => {
 });
 
 // Adicionar item ao carrinho
-router.post('/items', authenticateToken, sanitizeBody, (req, res) => {
+router.post('/items', authenticateToken, sanitizeBody, async (req, res) => {
   try {
     const { product_id, quantity = 1 } = req.body;
     
@@ -260,7 +347,7 @@ router.post('/items', authenticateToken, sanitizeBody, (req, res) => {
     }
     
     // Buscar produto
-    const product = db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
+    const product = await db.prepare('SELECT * FROM products WHERE id = ?').get(product_id);
     if (!product) {
       return res.status(404).json({ error: 'Produto não encontrado' });
     }
@@ -276,15 +363,15 @@ router.post('/items', authenticateToken, sanitizeBody, (req, res) => {
     }
     
     // Buscar ou criar carrinho
-    let cart = db.prepare('SELECT * FROM cart WHERE user_id = ?').get(req.user.id);
+    let cart = await db.prepare('SELECT * FROM cart WHERE user_id = ?').get(req.user.id);
     if (!cart) {
       const cartId = uuidv4();
-      db.prepare('INSERT INTO cart (id, user_id) VALUES (?, ?)').run(cartId, req.user.id);
+      await db.prepare('INSERT INTO cart (id, user_id) VALUES (?, ?)').run(cartId, req.user.id);
       cart = { id: cartId, user_id: req.user.id };
     }
     
     // Verificar se produto já está no carrinho
-    const existingItem = db.prepare('SELECT * FROM cart_items WHERE cart_id = ? AND product_id = ?').get(cart.id, product_id);
+    const existingItem = await db.prepare('SELECT * FROM cart_items WHERE user_id = ? AND product_id = ?').get(req.user.id, product_id);
     
     if (existingItem) {
       // Atualizar quantidade
@@ -295,19 +382,19 @@ router.post('/items', authenticateToken, sanitizeBody, (req, res) => {
         return res.status(400).json({ error: 'Estoque insuficiente para a quantidade solicitada' });
       }
       
-      db.prepare('UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      await db.prepare('UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(newQuantity, existingItem.id);
     } else {
-      // Adicionar novo item
+      // Adicionar novo item (PostgreSQL usa user_id diretamente)
       const itemId = uuidv4();
-      db.prepare(`
-        INSERT INTO cart_items (id, cart_id, product_id, store_id, quantity)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(itemId, cart.id, product_id, product.store_id, qty);
+      await db.prepare(`
+        INSERT INTO cart_items (id, user_id, product_id, quantity)
+        VALUES (?, ?, ?, ?)
+      `).run(itemId, req.user.id, product_id, qty);
     }
     
     // Atualizar timestamp do carrinho
-    db.prepare('UPDATE cart SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(cart.id);
+    await db.prepare('UPDATE cart SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(cart.id);
     
     res.json({ message: 'Item adicionado ao carrinho', cart_id: cart.id });
   } catch (error) {
@@ -317,7 +404,7 @@ router.post('/items', authenticateToken, sanitizeBody, (req, res) => {
 });
 
 // Atualizar quantidade de um item
-router.put('/items/:itemId', authenticateToken, sanitizeBody, (req, res) => {
+router.put('/items/:itemId', authenticateToken, sanitizeBody, async (req, res) => {
   try {
     const { quantity } = req.body;
     const qty = parseInt(quantity);
@@ -327,11 +414,11 @@ router.put('/items/:itemId', authenticateToken, sanitizeBody, (req, res) => {
     }
     
     // Buscar item do carrinho
-    const item = db.prepare(`
+    const item = await db.prepare(`
       SELECT ci.*, p.stock, p.active
       FROM cart_items ci
       LEFT JOIN products p ON ci.product_id = p.id
-      WHERE ci.id = ? AND ci.cart_id IN (SELECT id FROM cart WHERE user_id = ?)
+      WHERE ci.id = ? AND ci.user_id = ?
     `).get(req.params.itemId, req.user.id);
     
     if (!item) {
@@ -344,13 +431,13 @@ router.put('/items/:itemId', authenticateToken, sanitizeBody, (req, res) => {
     }
     
     // Atualizar quantidade
-    db.prepare('UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    await db.prepare('UPDATE cart_items SET quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
       .run(qty, req.params.itemId);
     
     // Atualizar timestamp do carrinho
-    const cartItem = db.prepare('SELECT cart_id FROM cart_items WHERE id = ?').get(req.params.itemId);
-    if (cartItem) {
-      db.prepare('UPDATE cart SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(cartItem.cart_id);
+    const userCart = await db.prepare('SELECT id FROM cart WHERE user_id = ?').get(req.user.id);
+    if (userCart) {
+      await db.prepare('UPDATE cart SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userCart.id);
     }
     
     res.json({ message: 'Quantidade atualizada' });
@@ -361,13 +448,12 @@ router.put('/items/:itemId', authenticateToken, sanitizeBody, (req, res) => {
 });
 
 // Remover item do carrinho
-router.delete('/items/:itemId', authenticateToken, (req, res) => {
+router.delete('/items/:itemId', authenticateToken, async (req, res) => {
   try {
     // Verificar se o item pertence ao carrinho do usuário
-    const item = db.prepare(`
+    const item = await db.prepare(`
       SELECT ci.* FROM cart_items ci
-      INNER JOIN cart c ON ci.cart_id = c.id
-      WHERE ci.id = ? AND c.user_id = ?
+      WHERE ci.id = ? AND ci.user_id = ?
     `).get(req.params.itemId, req.user.id);
     
     if (!item) {
@@ -375,10 +461,13 @@ router.delete('/items/:itemId', authenticateToken, (req, res) => {
     }
     
     // Remover item
-    db.prepare('DELETE FROM cart_items WHERE id = ?').run(req.params.itemId);
+    await db.prepare('DELETE FROM cart_items WHERE id = ?').run(req.params.itemId);
     
     // Atualizar timestamp do carrinho
-    db.prepare('UPDATE cart SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(item.cart_id);
+    const userCart = await db.prepare('SELECT id FROM cart WHERE user_id = ?').get(req.user.id);
+    if (userCart) {
+      await db.prepare('UPDATE cart SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(userCart.id);
+    }
     
     res.json({ message: 'Item removido do carrinho' });
   } catch (error) {
@@ -388,14 +477,14 @@ router.delete('/items/:itemId', authenticateToken, (req, res) => {
 });
 
 // Limpar carrinho
-router.delete('/', authenticateToken, (req, res) => {
+router.delete('/', authenticateToken, async (req, res) => {
   try {
-    const cart = db.prepare('SELECT * FROM cart WHERE user_id = ?').get(req.user.id);
+    const cart = await db.prepare('SELECT * FROM cart WHERE user_id = ?').get(req.user.id);
     
     if (cart) {
       // Deletar itens (cascade já remove, mas vamos fazer explicitamente)
-      db.prepare('DELETE FROM cart_items WHERE cart_id = ?').run(cart.id);
-      db.prepare('DELETE FROM cart WHERE id = ?').run(cart.id);
+      await db.prepare('DELETE FROM cart_items WHERE cart_id = ?').run(cart.id);
+      await db.prepare('DELETE FROM cart WHERE id = ?').run(cart.id);
     }
     
     res.json({ message: 'Carrinho limpo' });
@@ -420,38 +509,39 @@ router.post('/checkout/:storeId', authenticateToken, async (req, res) => {
     } = req.body;
     
     // Buscar carrinho do usuário
-    const cart = db.prepare('SELECT * FROM cart WHERE user_id = ?').get(req.user.id);
+    const cart = await db.prepare('SELECT * FROM cart WHERE user_id = ?').get(req.user.id);
     if (!cart) {
       return res.status(404).json({ error: 'Carrinho vazio' });
     }
     
     // Buscar itens do carrinho da loja específica
-    const items = db.prepare(`
+    const items = await db.prepare(`
       SELECT 
         ci.*,
         p.name as product_name,
         p.price as product_price,
         p.stock as product_stock,
-        p.active as product_active
+        p.active as product_active,
+        p.store_id
       FROM cart_items ci
       LEFT JOIN products p ON ci.product_id = p.id
-      WHERE ci.cart_id = ? AND ci.store_id = ?
-    `).all(cart.id, storeId);
+      WHERE ci.user_id = ? AND p.store_id = ?
+    `).all(req.user.id, storeId);
     
     // Debug: Log para entender o problema
     console.log('=== DEBUG CHECKOUT ===');
-    console.log('Cart ID:', cart.id);
+    console.log('User ID:', req.user.id);
     console.log('Store ID recebido:', storeId);
     console.log('Itens encontrados:', items.length);
     console.log('Itens:', items.map(i => ({ id: i.id, product_id: i.product_id, store_id: i.store_id })));
     
     // Verificar todos os itens do carrinho para debug
-    const allItems = db.prepare(`
-      SELECT ci.id, ci.product_id, ci.store_id, p.name as product_name
+    const allItems = await db.prepare(`
+      SELECT ci.id, ci.product_id, p.store_id, p.name as product_name
       FROM cart_items ci
       LEFT JOIN products p ON ci.product_id = p.id
-      WHERE ci.cart_id = ?
-    `).all(cart.id);
+      WHERE ci.user_id = ?
+    `).all(req.user.id);
     console.log('Todos os itens do carrinho:', allItems.map(i => ({ id: i.id, product_id: i.product_id, store_id: i.store_id, product_name: i.product_name })));
     
     if (items.length === 0) {
@@ -466,7 +556,7 @@ router.post('/checkout/:storeId', authenticateToken, async (req, res) => {
     }
     
     // Verificar se a loja existe e buscar informações da cidade
-    const store = db.prepare(`
+    const store = await db.prepare(`
       SELECT s.*, c.name as city_name
       FROM stores s
       LEFT JOIN cities c ON s.city_id = c.id
@@ -490,8 +580,8 @@ router.post('/checkout/:storeId', authenticateToken, async (req, res) => {
       }
       
       // Buscar produto completo para calcular preço com promoção
-      const fullProduct = db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
-      const priceInfo = fullProduct ? calculateProductPriceWithPromotion(fullProduct, db) : {
+      const fullProduct = await db.prepare('SELECT * FROM products WHERE id = ?').get(item.product_id);
+      const priceInfo = fullProduct ? await calculateProductPriceWithPromotion(fullProduct, db) : {
         finalPrice: parseFloat(item.product_price),
         originalPrice: parseFloat(item.product_price),
         hasPromotion: false
@@ -544,7 +634,7 @@ router.post('/checkout/:storeId', authenticateToken, async (req, res) => {
     
     // Criar pedido
     const orderId = uuidv4();
-    db.prepare(`
+    await db.prepare(`
       INSERT INTO orders (
         id, user_id, store_id, status, total_amount,
         shipping_address, shipping_city, shipping_state, shipping_zip, shipping_phone,
@@ -575,7 +665,7 @@ router.post('/checkout/:storeId', authenticateToken, async (req, res) => {
     `);
     
     for (const item of orderItems) {
-      insertItem.run(
+      await insertItem.run(
         uuidv4(),
         orderId,
         item.product_id,
@@ -589,20 +679,24 @@ router.post('/checkout/:storeId', authenticateToken, async (req, res) => {
       );
       
       // Atualizar estoque
-      const productForStock = db.prepare('SELECT stock FROM products WHERE id = ?').get(item.product_id);
+      const productForStock = await db.prepare('SELECT stock FROM products WHERE id = ?').get(item.product_id);
       if (productForStock && productForStock.stock !== null) {
-        db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(item.quantity, item.product_id);
+        await db.prepare('UPDATE products SET stock = stock - ? WHERE id = ?').run(item.quantity, item.product_id);
       }
     }
     
     // Remover itens do carrinho (apenas desta loja)
-    db.prepare('DELETE FROM cart_items WHERE cart_id = ? AND store_id = ?').run(cart.id, storeId);
+    await db.prepare(`
+      DELETE FROM cart_items 
+      WHERE user_id = ? 
+      AND product_id IN (SELECT id FROM products WHERE store_id = ?)
+    `).run(req.user.id, storeId);
     
     // Atualizar timestamp do carrinho
-    db.prepare('UPDATE cart SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(cart.id);
+    await db.prepare('UPDATE cart SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(cart.id);
     
     // Buscar pedido criado
-    const createdOrder = db.prepare(`
+    const createdOrder = await db.prepare(`
       SELECT o.*, 
              u.full_name as user_name,
              u.email as user_email,
@@ -614,7 +708,7 @@ router.post('/checkout/:storeId', authenticateToken, async (req, res) => {
       WHERE o.id = ?
     `).get(orderId);
     
-    const orderItemsData = db.prepare(`
+    const orderItemsData = await db.prepare(`
       SELECT oi.*, p.images
       FROM order_items oi
       LEFT JOIN products p ON oi.product_id = p.id
@@ -803,9 +897,9 @@ router.post('/checkout/:storeId', authenticateToken, async (req, res) => {
     
     // Criar notificação para o lojista
     try {
-      const storeUser = db.prepare('SELECT user_id FROM stores WHERE id = ?').get(storeId);
+      const storeUser = await db.prepare('SELECT user_id FROM stores WHERE id = ?').get(storeId);
       if (storeUser) {
-        createNotification(
+        await createNotification(
           storeUser.user_id,
           'order_new',
           'Novo Pedido Recebido',
