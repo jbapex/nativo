@@ -10,10 +10,12 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Configurações (AJUSTE AQUI)
-PROJECT_DIR="/caminho/para/local-mart"  # Ajuste para o caminho do seu projeto
-DB_USER="seu_usuario"                   # Ajuste para seu usuário do PostgreSQL
-DB_NAME="nome_do_banco"                 # Ajuste para o nome do seu banco
+# Configurações - NATIVO.CONTAAE.ONLINE
+PROJECT_DIR="/root/nativo"              # Caminho do projeto
+DB_TYPE="sqlite"                         # Tipo de banco: sqlite ou postgres
+DB_PATH="/root/nativo/backend/database.sqlite"  # Caminho do banco SQLite
+DB_USER=""                               # Não usado para SQLite
+DB_NAME=""                               # Não usado para SQLite
 BACKUP_DIR="$PROJECT_DIR/backups"        # Diretório de backups
 
 echo -e "${GREEN}🔄 Iniciando atualização do sistema Local Mart...${NC}\n"
@@ -23,19 +25,34 @@ mkdir -p "$BACKUP_DIR"
 
 # 1. Backup do banco de dados
 echo -e "${YELLOW}📦 Passo 1/6: Fazendo backup do banco de dados...${NC}"
-BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).sql.gz"
 
-# Verificar se é PostgreSQL ou SQLite
-if command -v pg_dump &> /dev/null; then
+# Verificar tipo de banco e fazer backup
+if [ "$DB_TYPE" = "sqlite" ]; then
+    # SQLite - backup do arquivo
+    if [ -f "$DB_PATH" ]; then
+        BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).db"
+        cp "$DB_PATH" "$BACKUP_FILE"
+        echo -e "${GREEN}✅ Backup SQLite criado: $BACKUP_FILE${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Arquivo do banco SQLite não encontrado em: $DB_PATH${NC}"
+        read -p "Continuar mesmo assim? (s/n) " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Ss]$ ]]; then
+            exit 1
+        fi
+    fi
+elif [ "$DB_TYPE" = "postgres" ]; then
     # PostgreSQL
-    pg_dump -U "$DB_USER" -d "$DB_NAME" | gzip > "$BACKUP_FILE"
-    echo -e "${GREEN}✅ Backup PostgreSQL criado: $BACKUP_FILE${NC}"
-elif [ -f "$PROJECT_DIR/backend/database/localmart.db" ]; then
-    # SQLite
-    cp "$PROJECT_DIR/backend/database/localmart.db" "$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).db"
-    echo -e "${GREEN}✅ Backup SQLite criado${NC}"
+    if command -v pg_dump &> /dev/null; then
+        BACKUP_FILE="$BACKUP_DIR/backup_$(date +%Y%m%d_%H%M%S).sql.gz"
+        pg_dump -U "$DB_USER" -d "$DB_NAME" | gzip > "$BACKUP_FILE"
+        echo -e "${GREEN}✅ Backup PostgreSQL criado: $BACKUP_FILE${NC}"
+    else
+        echo -e "${RED}❌ pg_dump não encontrado. Instale o PostgreSQL client.${NC}"
+        exit 1
+    fi
 else
-    echo -e "${YELLOW}⚠️  Não foi possível detectar o tipo de banco de dados${NC}"
+    echo -e "${YELLOW}⚠️  Tipo de banco não configurado corretamente (DB_TYPE=$DB_TYPE)${NC}"
     read -p "Continuar mesmo assim? (s/n) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Ss]$ ]]; then
