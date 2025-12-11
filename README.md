@@ -1,289 +1,109 @@
-# 🛒 Local Mart - Marketplace Local
+# 🛒 Local Mart / Nativo - Marketplace Local
 
-**Sistema completo de marketplace para comércio local com integração de pagamentos e gestão de lojas.**
+Sistema completo de marketplace para conectar lojas locais e clientes.
 
----
+## 🚀 Início Rápido
 
-## 📋 Sobre o Projeto
-
-O **Local Mart** é uma plataforma de marketplace local que conecta lojistas e clientes dentro da mesma cidade. O sistema oferece:
-
-- 🏪 **Gestão completa de lojas** - Cadastro, aprovação e customização
-- 📦 **Sistema de produtos** - CRUD completo com múltiplas imagens
-- 🛒 **Carrinho e checkout** - Processo de compra completo
-- 💰 **Pagamentos integrados** - Mercado Pago e WhatsApp
-- 📊 **Painel administrativo** - Gestão completa do sistema
-- 🎨 **Loja Online Premium** - Customização avançada para planos Enterprise
-
----
-
-## 🚀 Tecnologias
-
-### **Backend**
-- **Node.js** + **Express.js** - API RESTful
-- **SQLite** (desenvolvimento) / **PostgreSQL** (produção recomendado)
-- **JWT** - Autenticação com refresh tokens
-- **Mercado Pago SDK** - Integração de pagamentos
-- **Multer** - Upload de arquivos
-- **Winston** - Logging estruturado
-
-### **Frontend**
-- **React** + **Vite** - Framework moderno
-- **React Router** - Navegação
-- **Shadcn UI** - Componentes de interface
-- **Tailwind CSS** - Estilização
-- **Axios** - Cliente HTTP
-
----
-
-## 📦 Instalação
-
-### **Pré-requisitos**
-- Node.js 18+ 
-- npm ou yarn
-
-### **1. Clonar o repositório**
 ```bash
-git clone https://github.com/seu-usuario/local-mart.git
-cd local-mart
-```
+# 1. Clonar repositório
+git clone https://github.com/jbapex/nativo.git
+cd nativo
 
-### **2. Instalar dependências**
-
-**Backend:**
-```bash
-cd backend
+# 2. Instalar dependências
 npm install
-```
+cd backend && npm install && cd ..
 
-**Frontend:**
-```bash
-cd ..
-npm install
-```
+# 3. Configurar ambiente
+cp backend/.env.example backend/.env
+# Editar backend/.env com suas configurações
 
-### **3. Configurar variáveis de ambiente**
+# 4. Setup inicial (cria banco + dados iniciais)
+node backend/scripts/setup-inicial.js
 
-**Backend (`backend/.env`):**
-```env
-# JWT
-JWT_SECRET=sua-chave-jwt-aqui
-JWT_REFRESH_SECRET=sua-chave-refresh-token-aqui
-
-# CORS
-CORS_ORIGIN=http://localhost:3006
-
-# Mercado Pago (Opcional)
-MERCADOPAGO_WEBHOOK_SECRET=sua-assinatura-secreta-aqui
-
-# Google OAuth (Opcional)
-GOOGLE_CLIENT_ID=seu-client-id-aqui
-
-# Porta
-PORT=3001
-NODE_ENV=development
-```
-
-**Frontend (`src/.env` ou `.env.local`):**
-```env
-VITE_API_URL=http://localhost:3001/api
-```
-
-### **4. Inicializar banco de dados**
-```bash
-cd backend
-npm run migrate
-```
-
-### **5. Iniciar servidores**
-
-**Terminal 1 - Backend:**
-```bash
-cd backend
+# 5. Iniciar sistema
 npm run dev
 ```
 
-**Terminal 2 - Frontend:**
-```bash
-npm run dev
-```
-
-O sistema estará disponível em:
+Acesse:
 - **Frontend:** http://localhost:3006
 - **Backend API:** http://localhost:3001/api
 
----
+## 📋 O Que É Criado Automaticamente
 
-## 🎯 Funcionalidades Principais
+Ao executar `setup-inicial.js`, o sistema cria automaticamente:
 
-### **Para Clientes**
-- ✅ Busca e filtro de produtos
-- ✅ Visualização de lojas
-- ✅ Carrinho de compras
-- ✅ Checkout com múltiplos métodos de pagamento
-- ✅ Acompanhamento de pedidos
-- ✅ Sistema de favoritos
-- ✅ Avaliações de produtos
-
-### **Para Lojistas**
-- ✅ Cadastro e gestão de loja
-- ✅ CRUD completo de produtos
-- ✅ Gestão de pedidos
-- ✅ Configuração de métodos de pagamento
-- ✅ Loja Online Premium (planos Enterprise)
-- ✅ Dashboard com métricas
-- ✅ Sistema de promoções
-
-### **Para Administradores**
-- ✅ Painel administrativo completo
-- ✅ Aprovação de lojas
-- ✅ Gestão de planos e assinaturas
-- ✅ Gestão de categorias e cidades
-- ✅ Relatórios e analytics
-
----
-
-## 🔐 Segurança
-
-### **Implementado:**
-- ✅ JWT com refresh tokens (15min access, 30 dias refresh)
-- ✅ Validação de assinatura de webhook (Mercado Pago)
-- ✅ Sanitização de HTML (prevenção XSS)
-- ✅ Validação robusta de uploads (extensão + MIME type)
-- ✅ Rate limiting
-- ✅ Helmet.js (headers de segurança)
-- ✅ Prepared statements (proteção SQL injection)
-
----
-
-## 🚀 Performance
-
-### **Implementado:**
-- ✅ Paginação completa em todas as listagens
-- ✅ Compressão Gzip de respostas
-- ✅ Cache básico em memória
-- ✅ Estrutura de resposta padronizada
-
----
-
-## 📁 Estrutura do Projeto
-
-```
-local-mart/
-├── backend/                 # API Backend
-│   ├── routes/             # Rotas da API
-│   ├── middleware/         # Middlewares (auth, validation)
-│   ├── database/           # Schema e migrações
-│   ├── utils/              # Utilitários
-│   ├── scripts/            # Scripts (backup, migrate)
-│   └── server.js           # Servidor principal
-│
-├── src/                    # Frontend React
-│   ├── pages/              # Páginas da aplicação
-│   ├── components/         # Componentes reutilizáveis
-│   ├── api/                # Cliente API
-│   └── utils/              # Utilitários frontend
-│
-└── docs/                   # Documentação
-```
-
----
-
-## 🧪 Testes
-
-```bash
-# Backend
-cd backend
-npm test
-
-# Com UI
-npm run test:ui
-
-# Coverage
-npm run test:coverage
-```
-
----
-
-## 📦 Scripts Disponíveis
-
-### **Backend:**
-```bash
-npm run dev          # Desenvolvimento (watch mode)
-npm start            # Produção
-npm run migrate      # Executar migrações
-npm run backup       # Backup completo
-npm run backup:db    # Backup apenas do banco
-npm run backup:uploads  # Backup apenas de uploads
-```
-
-### **Frontend:**
-```bash
-npm run dev          # Desenvolvimento
-npm run build        # Build para produção
-npm run preview      # Preview do build
-```
-
----
-
-## 🔄 Migração para Produção
-
-### **Checklist:**
-- [ ] Configurar variáveis de ambiente de produção
-- [ ] Migrar banco de dados para PostgreSQL
-- [ ] Configurar backup automático (cron)
-- [ ] Configurar error tracking (Sentry)
-- [ ] Migrar uploads para S3/Cloudinary
-- [ ] Configurar CDN
-- [ ] Configurar SSL/HTTPS
-- [ ] Configurar webhook do Mercado Pago (produção)
-
----
+- ✅ **4 Planos de Assinatura** (Gratuito, Básico, Profissional, Empresarial)
+- ✅ **10 Categorias Padrão** (Alimentos, Roupas, Eletrônicos, etc.)
+- ✅ **Todas as Configurações do Sistema** (geral, usuários, segurança, integrações, aparência)
+- ✅ **Estrutura Completa do Banco de Dados**
 
 ## 📚 Documentação
 
-- [Guia de Desenvolvimento](GUIA_DESENVOLVIMENTO_VS_PRODUCAO.md)
-- [Configuração do Mercado Pago](CONFIGURACAO_MERCADOPAGO_LOJISTAS.md)
-- [Configuração de Webhook](CONFIGURACAO_WEBHOOK_MERCADOPAGO.md)
-- [Análise do Sistema](ANALISE_SISTEMA_COMPLETA_2025.md)
-- [O que Falta](O_QUE_FALTA_RESUMO.md)
+- [Instalação Completa](INSTALACAO_COMPLETA.md) - Guia detalhado de instalação
+- [Guia de Deploy VPS](GUIA_DEPLOY_VPS.md) - Como fazer deploy na VPS
+- [Migrações do Banco](backend/database/MIGRACOES_README.md) - Guia de migrações
+- [Exportar/Importar Configs](COMO_EXPORTAR_IMPORTAR_CONFIGS.md) - Como migrar configurações
 
----
+## 🛠️ Tecnologias
 
-## 🤝 Contribuindo
+- **Frontend:** React, Vite, TailwindCSS
+- **Backend:** Node.js, Express
+- **Banco de Dados:** SQLite (padrão) ou PostgreSQL
+- **Autenticação:** JWT
+- **Process Manager:** PM2 (produção)
 
-1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+## 📦 Estrutura do Projeto
 
----
+```
+nativo/
+├── backend/          # API Backend
+│   ├── routes/      # Rotas da API
+│   ├── database/    # Schemas e migrações
+│   └── scripts/     # Scripts utilitários
+├── src/             # Frontend React
+│   ├── pages/       # Páginas
+│   ├── components/  # Componentes
+│   └── api/         # Cliente API
+└── docs/            # Documentação
+```
+
+## 🔧 Scripts Disponíveis
+
+```bash
+# Desenvolvimento
+npm run dev              # Inicia frontend e backend
+
+# Setup
+node backend/scripts/setup-inicial.js        # Setup completo
+node backend/scripts/aplicar-migracoes.js   # Apenas migrações
+node backend/scripts/seed-inicial.js        # Apenas dados iniciais
+
+# Configurações
+node backend/scripts/exportar-configuracoes-admin.js   # Exportar configs
+node backend/scripts/importar-configuracoes-admin.js   # Importar configs
+```
+
+## 🔐 Variáveis de Ambiente
+
+Copie `backend/.env.example` para `backend/.env` e configure:
+
+```env
+NODE_ENV=development
+PORT=3001
+DB_TYPE=sqlite
+DB_PATH=./database.sqlite
+JWT_SECRET=seu_secret_aqui
+```
 
 ## 📝 Licença
 
-Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
+Este projeto é privado e proprietário.
+
+## 🤝 Suporte
+
+Para dúvidas ou problemas, consulte a documentação ou abra uma issue.
 
 ---
 
-## 👥 Autores
-
-- **Desenvolvedor** - [Seu Nome](https://github.com/seu-usuario)
-
----
-
-## 🙏 Agradecimentos
-
-- Base44 - Estrutura inicial do projeto
-- Mercado Pago - Integração de pagamentos
-- Comunidade open source
-
----
-
-## 📞 Suporte
-
-Para suporte, envie um email para suporte@localmart.com ou abra uma issue no GitHub.
-
----
-
-**Desenvolvido com ❤️ para o comércio local**
+**Versão:** 1.0.0  
+**Última atualização:** 2024
