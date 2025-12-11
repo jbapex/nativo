@@ -49,6 +49,9 @@ backend/backups/
 *.backup
 *.bak
 
+# Exports de configurações (não versionar)
+configs-admin-export.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
