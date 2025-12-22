@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShoppingBag, Store, MessageCircle, Heart, Clock, Check, Star, Eye, Download, Truck, Zap } from "lucide-react";
+import { ShoppingBag, Store, MessageCircle, Heart, Clock, Check, Star, Eye, Truck, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
@@ -25,10 +25,6 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const [favoriteSuccess, setFavoriteSuccess] = useState(false);
   const [favoriteProduct, setFavoriteProduct] = useState(null);
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [exportSearchTerm, setExportSearchTerm] = useState("");
-  const [exportCategory, setExportCategory] = useState("all");
-  const [exportStore, setExportStore] = useState("all");
   const [productRatings, setProductRatings] = useState({});
 
   useEffect(() => {
@@ -93,6 +89,10 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
         setFavorites(userData.favorites || []);
       }
     } catch (error) {
+      // Erro 401/403/429 é esperado quando usuário não está logado ou há rate limit - não logar no console
+      if (error.status !== 401 && error.status !== 403 && error.status !== 429 && !error.silent) {
+        console.error("Erro ao verificar autenticação:", error);
+      }
       setUser(null);
       setFavorites([]);
     }
@@ -185,7 +185,7 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+      <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
         {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
           <Card key={i} className="overflow-hidden">
             <Skeleton className="h-48 sm:h-64 w-full" />
@@ -221,99 +221,7 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
     );
   }
 
-  const handleExportClick = () => {
-    setExportDialogOpen(true);
-  };
-
-  const handleExportProducts = () => {
-    // Filtrar produtos baseado nos filtros do dialog
-    let filteredProducts = [...products];
-
-    // Filtrar por busca
-    if (exportSearchTerm) {
-      filteredProducts = filteredProducts.filter(product =>
-        product.name?.toLowerCase().includes(exportSearchTerm.toLowerCase()) ||
-        product.description?.toLowerCase().includes(exportSearchTerm.toLowerCase()) ||
-        product.store_name?.toLowerCase().includes(exportSearchTerm.toLowerCase())
-      );
-    }
-
-    // Filtrar por categoria
-    if (exportCategory !== "all") {
-      filteredProducts = filteredProducts.filter(product =>
-        product.category_id === exportCategory ||
-        product.category === exportCategory ||
-        product.category_name === exportCategory
-      );
-    }
-
-    // Filtrar por loja
-    if (exportStore !== "all") {
-      filteredProducts = filteredProducts.filter(product =>
-        product.store_id === exportStore ||
-        product.store_name === exportStore
-      );
-    }
-
-    if (!filteredProducts || filteredProducts.length === 0) {
-      alert("Nenhum produto encontrado com os filtros selecionados");
-      return;
-    }
-
-    // Preparar dados para CSV
-    const csvHeaders = [
-      "Nome",
-      "Descrição",
-      "Preço",
-      "Preço Comparação",
-      "Estoque",
-      "Categoria",
-      "Loja",
-      "Ativo",
-      "Destaque",
-      "Visualizações"
-    ];
-
-    const csvRows = filteredProducts.map(product => [
-      product.name || "",
-      (product.description || "").replace(/,/g, ";").replace(/\n/g, " "),
-      product.price || 0,
-      product.compare_price || "",
-      product.stock || 0,
-      product.category_name || product.category || "",
-      product.store_name || "",
-      product.active ? "Sim" : "Não",
-      product.featured ? "Sim" : "Não",
-      product.total_views || 0
-    ]);
-
-    // Criar conteúdo CSV
-    const csvContent = [
-      csvHeaders.join(","),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
-
-    // Criar blob e fazer download
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    
-    link.setAttribute("href", url);
-    link.setAttribute("download", `produtos_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = "hidden";
-    
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-
-    // Fechar dialog e limpar filtros
-    setExportDialogOpen(false);
-    setExportSearchTerm("");
-    setExportCategory("all");
-    setExportStore("all");
-  };
-
-  // Obter categorias e lojas únicas dos produtos
+  // Obter categorias e lojas únicas dos produtos (mantido para uso futuro se necessário)
   const uniqueCategories = [...new Set(products.map(p => ({
     id: p.category_id || p.category,
     name: p.category_name || p.category
@@ -324,57 +232,20 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
     name: p.store_name
   })).filter(s => s.id && s.name))];
 
-  // Contar produtos filtrados
-  const getFilteredCount = () => {
-    let filtered = [...products];
-    if (exportSearchTerm) {
-      filtered = filtered.filter(product =>
-        product.name?.toLowerCase().includes(exportSearchTerm.toLowerCase()) ||
-        product.description?.toLowerCase().includes(exportSearchTerm.toLowerCase()) ||
-        product.store_name?.toLowerCase().includes(exportSearchTerm.toLowerCase())
-      );
-    }
-    if (exportCategory !== "all") {
-      filtered = filtered.filter(product =>
-        product.category_id === exportCategory ||
-        product.category === exportCategory ||
-        product.category_name === exportCategory
-      );
-    }
-    if (exportStore !== "all") {
-      filtered = filtered.filter(product =>
-        product.store_id === exportStore ||
-        product.store_name === exportStore
-      );
-    }
-    return filtered.length;
-  };
-
   return (
     <div className="space-y-6">
       {!hideHeader && (
         <div className="flex justify-between items-center flex-wrap gap-4">
-          <h2 className="text-2xl font-bold">Produtos para você</h2>
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-500">
-              {products.length} produtos encontrados
-            </div>
-            {products.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleExportClick}
-                className="gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Exportar produtos
-              </Button>
-            )}
-          </div>
+          <h2 
+            className="text-xl sm:text-2xl font-bold"
+            style={{ color: appearanceSettings?.primaryColor || appearanceSettings?.buttonPrimaryColor || '#2563eb' }}
+          >
+            Produtos para você
+          </h2>
         </div>
       )}
       
-      <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6">
+      <div className="grid grid-cols-2 xs:grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2 sm:gap-3 lg:gap-4">
         {products.map((product, index) => (
           <motion.div
             key={product.id}
@@ -382,68 +253,71 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.05 }}
             whileHover={{ y: -5 }}
-            className="h-full"
+            className="h-full flex"
           >
             <Link 
               to={`/produto/${product.id}`} 
-              className="h-full block"
+              className="h-full w-full block flex flex-col"
               onClick={() => trackProduct(product)}
             >
-              <Card className="overflow-hidden h-full border hover:shadow-md transition-all duration-300 group"
+              <Card className="overflow-hidden h-full flex flex-col border-2 hover:shadow-sm transition-all duration-200 group bg-white relative"
                     style={{
-                      borderColor: appearanceSettings.cardBorderColor || '#f3f4f6',
+                      borderColor: (() => {
+                        const primaryColor = appearanceSettings.primaryColor || appearanceSettings.buttonPrimaryColor || '#2563eb';
+                        // Converter hex para rgba com opacidade 0.3
+                        const hex = primaryColor.replace('#', '');
+                        const r = parseInt(hex.substr(0, 2), 16);
+                        const g = parseInt(hex.substr(2, 2), 16);
+                        const b = parseInt(hex.substr(4, 2), 16);
+                        return `rgba(${r}, ${g}, ${b}, 0.3)`;
+                      })(),
                       backgroundColor: appearanceSettings.cardBackgroundColor || '#ffffff',
-                      boxShadow: appearanceSettings.cardShadowColor || '0 1px 3px 0 rgba(0, 0, 0, 0.1)'
+                      boxShadow: 'none'
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = appearanceSettings.inputFocusColor || '#93c5fd';
-                      e.currentTarget.style.boxShadow = `0 4px 6px ${appearanceSettings.cardShadowColor || 'rgba(0, 0, 0, 0.1)'}`;
+                      e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.08)';
+                      const primaryColor = appearanceSettings.primaryColor || appearanceSettings.buttonPrimaryColor || '#2563eb';
+                      const hex = primaryColor.replace('#', '');
+                      const r = parseInt(hex.substr(0, 2), 16);
+                      const g = parseInt(hex.substr(2, 2), 16);
+                      const b = parseInt(hex.substr(4, 2), 16);
+                      e.currentTarget.style.borderColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = appearanceSettings.cardBorderColor || '#f3f4f6';
-                      e.currentTarget.style.boxShadow = appearanceSettings.cardShadowColor || '0 1px 3px 0 rgba(0, 0, 0, 0.1)';
+                      e.currentTarget.style.boxShadow = 'none';
+                      const primaryColor = appearanceSettings.primaryColor || appearanceSettings.buttonPrimaryColor || '#2563eb';
+                      const hex = primaryColor.replace('#', '');
+                      const r = parseInt(hex.substr(0, 2), 16);
+                      const g = parseInt(hex.substr(2, 2), 16);
+                      const b = parseInt(hex.substr(4, 2), 16);
+                      e.currentTarget.style.borderColor = `rgba(${r}, ${g}, ${b}, 0.3)`;
                     }}>
-                <div className="relative">
+                <div className="relative aspect-square overflow-hidden">
                   <img
-                    src={product.images?.[0] || product.image_url || "https://placehold.co/300x300/e2e8f0/a1a1aa?text=Sem+Imagem"}
+                    src={product.images?.[0] || product.image_url || "https://placehold.co/400x400/e2e8f0/a1a1aa?text=Sem+Imagem"}
                     alt={product.name}
-                    className="w-full h-48 xs:h-56 sm:h-64 md:h-72 object-cover group-hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full object-cover group-hover:opacity-95 transition-opacity duration-200"
+                    loading="lazy"
                   />
                   
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-                  
-                  {/* Etiqueta de Desconto da Campanha (amarela com raio) */}
-                  {product.campaign && product.campaign.discount_percent && (
-                    <div className="absolute top-2 left-2 z-20 bg-yellow-400 flex items-center gap-1 px-2 py-1 rounded-sm shadow-md">
-                      <Zap className="w-3 h-3 text-orange-500 fill-orange-500" />
-                      <span className="text-orange-600 font-bold text-sm">
-                        -{Math.round(product.campaign.discount_percent)}%
-                      </span>
-                    </div>
-                  )}
-                  
-                  {/* Badge de Campanha (se não houver desconto percentual) */}
-                  {product.campaign && !product.campaign.discount_percent && (
-                    <Badge 
-                      className="absolute top-2 left-2 text-white font-bold text-xs px-2 py-1 z-10"
-                      style={{
-                        backgroundColor: product.campaign.badge_color || "#EF4444",
-                      }}
-                    >
-                      {product.campaign.badge_text || "EM PROMOÇÃO"}
-                    </Badge>
-                  )}
-                  
-                  {/* Badge de Desconto (se não houver campanha ou se houver desconto adicional) */}
-                  {!product.campaign && product.compare_price && product.compare_price > product.price ? (
-                    <Badge className="absolute top-2 left-2 bg-red-500 text-white font-medium">
-                      {Math.round((1 - product.price / product.compare_price) * 100)}% OFF
-                    </Badge>
-                  ) : product.campaign && product.compare_price && product.compare_price > product.price ? (
-                    <Badge className="absolute top-2 left-2 bg-orange-500 text-white font-medium text-xs">
-                      +{Math.round((1 - product.price / product.compare_price) * 100)}% OFF
-                    </Badge>
-                  ) : null}
+                  {/* Badge de Desconto Verde (estilo da foto) */}
+                  {(() => {
+                    let discountPercent = 0;
+                    if (product.campaign && product.campaign.discount_percent) {
+                      discountPercent = Math.round(product.campaign.discount_percent);
+                    } else if (product.compare_price && product.compare_price > product.price) {
+                      discountPercent = Math.round((1 - product.price / product.compare_price) * 100);
+                    }
+                    
+                    if (discountPercent > 0) {
+                      return (
+                        <div className="absolute top-1.5 left-1.5 z-20 bg-green-600 flex items-center justify-center px-1.5 py-0.5 rounded text-white font-semibold text-[10px] leading-tight">
+                          -{discountPercent}%
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   
                   {product.featured ? (
                     <Badge className="absolute top-2 right-12 bg-yellow-500 text-white font-medium">
@@ -453,23 +327,23 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
                   ) : null}
                   
                   <button
-                    className={`absolute top-2 right-2 w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                    className={`absolute bottom-1.5 right-1.5 w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                       favorites.includes(product.id) 
-                        ? "bg-red-500" 
-                        : "bg-white/90 backdrop-blur-sm hover:bg-gray-100"
+                        ? "bg-red-500 shadow-sm" 
+                        : "bg-white/95 backdrop-blur-sm hover:bg-white shadow-sm"
                     }`}
                     onClick={(e) => handleFavorite(e, product)}
                   >
-                    <Heart className={`w-4 h-4 transition-colors ${
+                    <Heart className={`w-3.5 h-3.5 transition-colors ${
                       favorites.includes(product.id) 
                         ? "text-white fill-white" 
-                        : "text-gray-700"
+                        : "text-gray-600"
                     }`} />
                   </button>
                   
                   {/* Temporizador de Oferta - Base da Imagem */}
                   {product.promotion && product.promotion.show_timer && product.promotion.end_date && (
-                    <div className="absolute bottom-0 left-0 right-0 p-1.5">
+                    <div className="absolute bottom-0 left-0 right-0">
                       <CountdownTimer endDate={product.promotion.end_date} className="text-xs compact" />
                     </div>
                   )}
@@ -477,24 +351,24 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
                   {/* Removido: informações de visualizações/novo que apareciam no hover */}
                 </div>
 
-                <CardContent className="p-3 sm:p-4">
+                <CardContent className="p-2 sm:p-2.5 space-y-0.5 flex-1 flex flex-col">
                   {/* Nome do Produto */}
                   {product.name && (
-                    <h3 className="font-semibold text-sm sm:text-base line-clamp-2 group-hover:text-blue-600 transition-colors mb-2 min-h-[2.5rem]">
+                    <h3 className="font-medium text-[11px] sm:text-xs line-clamp-2 text-gray-900 leading-tight min-h-[2rem]">
                       {product.name}
                     </h3>
                   )}
                   
-                  {/* Avaliação com Estrelas */}
+                  {/* Avaliação com Estrelas (estilo Havan) */}
                   {productRatings[product.id] && productRatings[product.id].total_reviews > 0 && (
-                    <div className="flex items-center gap-1.5 mb-2">
+                    <div className="flex items-center gap-1">
                       <div className="flex items-center gap-0.5">
                         {[1, 2, 3, 4, 5].map((star) => {
                           const avgRating = Number(productRatings[product.id].average_rating) || 0;
                           return (
                             <Star
                               key={star}
-                              className={`w-3 h-3 ${
+                              className={`w-2.5 h-2.5 ${
                                 star <= Math.round(avgRating)
                                   ? "text-yellow-400 fill-yellow-400"
                                   : "text-gray-300"
@@ -503,71 +377,41 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
                           );
                         })}
                       </div>
-                      <span className="text-xs text-gray-600">
-                        {(Number(productRatings[product.id].average_rating) || 0).toFixed(1)} ({productRatings[product.id].total_reviews})
+                      <span className="text-[10px] text-gray-500">
+                        ({productRatings[product.id].total_reviews})
                       </span>
                     </div>
                   )}
                   
-                  {/* Preços - De/Por */}
-                  <div className="mb-2">
+                  {/* Preços (estilo Havan - mais compacto) */}
+                  <div className="space-y-0.5">
                     {product.compare_price && product.compare_price > product.price ? (
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">De:</span>
-                          <span className="text-xs text-gray-400 line-through">
-                            {formatCurrency(product.compare_price)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-500">Por:</span>
-                          <span className="text-base sm:text-lg font-bold text-green-600">
-                            {formatCurrency(product.price)}
-                          </span>
-                        </div>
-                        {Math.round((1 - product.price / product.compare_price) * 100) > 0 && (
-                          <span className="text-xs font-semibold text-red-600">
-                            Economize {formatCurrency(product.compare_price - product.price)}
-                          </span>
-                        )}
-                      </div>
+                      <>
+                        <span className="text-[10px] text-gray-400 line-through block">
+                          {formatCurrency(product.compare_price)}
+                        </span>
+                        <span className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 block">
+                          {formatCurrency(product.price)}
+                        </span>
+                      </>
                     ) : (
-                      <span className="text-base sm:text-lg font-bold text-gray-900">
+                      <span className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 block">
                         {formatCurrency(product.price)}
                       </span>
                     )}
+                    
+                    {/* Parcelamento (estilo Havan) */}
+                    {product.price && (() => {
+                      const installments = 10;
+                      const installmentValue = product.price / installments;
+                      return (
+                        <span className="text-[10px] text-gray-500 block">
+                          {installments}x de {formatCurrency(installmentValue)}
+                        </span>
+                      );
+                    })()}
                   </div>
                   
-                  {/* Informações Adicionais */}
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100 mb-2">
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
-                      <Truck className="w-3 h-3" />
-                      <span>Frete calculado</span>
-                    </div>
-                    {product.stock !== null && product.stock !== undefined && (
-                      <span className={`text-xs font-medium ${
-                        product.stock > 10 ? "text-green-600" : product.stock > 0 ? "text-orange-600" : "text-red-600"
-                      }`}>
-                        {product.stock > 0 ? `${product.stock} em estoque` : "Esgotado"}
-                      </span>
-                    )}
-                  </div>
-                  
-                  <button
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      navigate(`/produto/${product.id}`);
-                    }}
-                    className="w-full mt-2 sm:mt-3 py-1.5 sm:py-2 rounded-lg flex items-center justify-center gap-1 sm:gap-2 font-medium transition-all duration-200 text-xs sm:text-sm hover:opacity-90 hover:shadow-md"
-                    style={{
-                      backgroundColor: appearanceSettings.buttonPrimaryColor || '#2563eb',
-                      color: appearanceSettings.buttonTextColor || '#ffffff'
-                    }}
-                  >
-                    <Eye className="w-3 h-3 sm:w-4 sm:h-4" />
-                    Ver Produto
-                  </button>
                 </CardContent>
               </Card>
             </Link>
@@ -595,108 +439,6 @@ export default function ProductGrid({ products, loading, emptyMessage, appearanc
         }}
       />
 
-      {/* Dialog de Exportação */}
-      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Exportar Produtos</DialogTitle>
-            <DialogDescription>
-              Filtre os produtos que deseja exportar. O arquivo será baixado em formato CSV.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            {/* Busca */}
-            <div className="space-y-2">
-              <Label htmlFor="export-search">Buscar produtos</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  id="export-search"
-                  placeholder="Digite o nome, descrição ou loja..."
-                  value={exportSearchTerm}
-                  onChange={(e) => setExportSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-
-            {/* Filtros */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Categoria */}
-              <div className="space-y-2">
-                <Label htmlFor="export-category">Categoria</Label>
-                <Select value={exportCategory} onValueChange={setExportCategory}>
-                  <SelectTrigger id="export-category">
-                    <SelectValue placeholder="Todas as categorias" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as categorias</SelectItem>
-                    {uniqueCategories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Loja */}
-              <div className="space-y-2">
-                <Label htmlFor="export-store">Loja</Label>
-                <Select value={exportStore} onValueChange={setExportStore}>
-                  <SelectTrigger id="export-store">
-                    <SelectValue placeholder="Todas as lojas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as lojas</SelectItem>
-                    {uniqueStores.map((store) => (
-                      <SelectItem key={store.id} value={store.id}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Contador de produtos */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-              <p className="text-sm text-blue-800">
-                <strong>{getFilteredCount()}</strong> {getFilteredCount() === 1 ? 'produto será exportado' : 'produtos serão exportados'}
-                {getFilteredCount() !== products.length && (
-                  <span className="text-blue-600 ml-1">
-                    (de {products.length} total)
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setExportDialogOpen(false);
-                setExportSearchTerm("");
-                setExportCategory("all");
-                setExportStore("all");
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              onClick={handleExportProducts}
-              disabled={getFilteredCount() === 0}
-              className="gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Exportar {getFilteredCount() > 0 && `(${getFilteredCount()})`}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
       <AnimatePresence>
         {favoriteSuccess && (
           <motion.div

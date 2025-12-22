@@ -83,7 +83,7 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
               : `0 4px 6px -1px ${appearanceSettings?.cardShadowColor || 'rgba(0, 0, 0, 0.1)'}`
           }}
         >
-          <div className="p-6">
+          <div className="p-4 sm:p-5">
             <div className="flex flex-col lg:flex-row gap-4 items-center">
               {/* Campo de Busca Principal */}
               <div className="relative flex-1 w-full">
@@ -109,7 +109,7 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
                       handleSearchSubmit(e);
                     }
                   }}
-                  className="w-full h-14 pl-14 pr-14 rounded-xl border-2 transition-all duration-300 text-lg focus:outline-none focus:ring-0"
+                  className="w-full h-12 sm:h-14 pl-12 sm:pl-14 pr-12 sm:pr-14 rounded-xl border-2 transition-all duration-300 text-sm sm:text-base focus:outline-none focus:ring-0"
                   style={{
                     backgroundColor: isFocused 
                       ? `${appearanceSettings?.inputBackgroundColor || '#ffffff'}80`
@@ -135,7 +135,7 @@ export default function SearchBar({ value, onChange, onCategoryChange, selectedC
               {/* Botão de Buscar */}
               <Button
                 type="submit"
-                className="h-14 px-8 text-lg font-semibold rounded-xl transition-all duration-300 text-white shadow-lg hover:shadow-xl w-full lg:w-auto"
+                className="h-12 sm:h-14 px-6 sm:px-8 text-sm sm:text-base font-semibold rounded-xl transition-all duration-300 text-white shadow-lg hover:shadow-xl w-full lg:w-auto"
                 style={{
                   background: `linear-gradient(to right, ${appearanceSettings?.buttonPrimaryColor || '#2563eb'}, ${appearanceSettings?.secondaryColor || '#1d4ed8'})`,
                   color: appearanceSettings?.buttonTextColor || '#ffffff',

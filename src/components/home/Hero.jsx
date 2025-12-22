@@ -57,6 +57,10 @@ export default function Hero({ appearanceSettings = {} }) {
       setUser(userData);
       setIsAuthenticated(true);
     } catch (error) {
+      // Erro 401/403/429 é esperado quando usuário não está logado ou há rate limit - não logar no console
+      if (error.status !== 401 && error.status !== 403 && error.status !== 429 && !error.silent) {
+        console.error("Erro ao verificar autenticação:", error);
+      }
       setUser(null);
       setIsAuthenticated(false);
     }
@@ -78,6 +82,7 @@ export default function Hero({ appearanceSettings = {} }) {
 
   return (
     <div 
+      data-hero-section
       className="relative overflow-hidden bg-gradient-to-br"
       style={{
         background: `linear-gradient(to bottom right, ${primaryColor}, ${secondaryColor})`
@@ -100,7 +105,7 @@ export default function Hero({ appearanceSettings = {} }) {
       <div className="absolute -bottom-32 -left-32 w-80 h-80 rounded-full bg-blue-900/30 blur-3xl"></div>
       
       {/* Conteúdo principal */}
-      <div className="w-full max-w-[95%] 2xl:max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6 py-12 sm:py-20 lg:py-28 relative z-10">
+      <div className="w-full max-w-[95%] 2xl:max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6 py-8 sm:py-12 lg:py-16 relative z-10">
         <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
           <motion.div 
             className="lg:w-1/2 text-center lg:text-left"
@@ -109,7 +114,7 @@ export default function Hero({ appearanceSettings = {} }) {
             transition={{ duration: 0.5 }}
           >
             <motion.h1 
-              className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white leading-tight mb-4"
+              className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight mb-4"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
@@ -123,7 +128,7 @@ export default function Hero({ appearanceSettings = {} }) {
             </motion.h1>
             
             <motion.p 
-              className="text-base sm:text-lg lg:text-xl text-blue-100 mb-6 sm:mb-8"
+              className="text-base sm:text-lg text-blue-100 mb-5 sm:mb-6"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
@@ -163,35 +168,35 @@ export default function Hero({ appearanceSettings = {} }) {
               transition={{ delay: 0.5 }}
             >
               <div className="flex flex-col items-center lg:items-start">
-                <span className="font-bold text-2xl sm:text-3xl text-white">{statsProducts}</span>
+                <span className="font-bold text-xl sm:text-2xl text-white">{statsProducts}</span>
                 <span className="text-xs sm:text-sm text-blue-100">Produtos</span>
               </div>
               <div className="flex flex-col items-center lg:items-start">
-                <span className="font-bold text-2xl sm:text-3xl text-white">{statsVendors}</span>
+                <span className="font-bold text-xl sm:text-2xl text-white">{statsVendors}</span>
                 <span className="text-xs sm:text-sm text-blue-100">Vendedores</span>
               </div>
               <div className="flex flex-col items-center lg:items-start">
-                <span className="font-bold text-2xl sm:text-3xl text-white">{statsClients}</span>
+                <span className="font-bold text-xl sm:text-2xl text-white">{statsClients}</span>
                 <span className="text-xs sm:text-sm text-blue-100">Clientes</span>
               </div>
             </motion.div>
             
             <motion.div
-              className="mt-8 flex flex-wrap gap-3 items-center justify-center lg:justify-start text-blue-100 text-sm"
+              className="mt-6 flex flex-wrap gap-3 items-center justify-center lg:justify-start text-blue-100 text-sm"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.6 }}
             >
               <div className="flex items-center">
-                <CheckCircle className="w-4 h-4 mr-1 text-cyan-300" />
+                <CheckCircle className="w-3.5 h-3.5 mr-1 text-cyan-300" />
                 <span>100% Grátis</span>
               </div>
               <div className="flex items-center">
-                <CheckCircle className="w-4 h-4 mr-1 text-cyan-300" />
+                <CheckCircle className="w-3.5 h-3.5 mr-1 text-cyan-300" />
                 <span>Sem intermediários</span>
               </div>
               <div className="flex items-center">
-                <CheckCircle className="w-4 h-4 mr-1 text-cyan-300" />
+                <CheckCircle className="w-3.5 h-3.5 mr-1 text-cyan-300" />
                 <span>Contato direto</span>
               </div>
             </motion.div>
@@ -208,9 +213,11 @@ export default function Hero({ appearanceSettings = {} }) {
                 <img
                   src={heroImage}
                   alt="NATIVO Marketplace"
-                  className="w-full rounded-lg object-cover"
+                  className="w-full h-auto rounded-lg object-cover"
+                  style={{ minHeight: '300px', maxHeight: '450px' }}
+                  loading="eager"
                   onError={(e) => {
-                    e.target.src = "https://images.unsplash.com/photo-1573855619003-97b4799dcd8b?auto=format&fit=crop&w=800";
+                    e.target.src = "https://images.unsplash.com/photo-1573855619003-97b4799dcd8b?auto=format&fit=crop&w=1200";
                   }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>

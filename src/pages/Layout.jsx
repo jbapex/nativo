@@ -57,6 +57,8 @@ export default function Layout({ children, currentPageName }) {
   const [heroSecondaryColor, setHeroSecondaryColor] = React.useState("#06b6d4");
   const hasAppliedCachedTheme = React.useRef(false);
   const [campaignColors, setCampaignColors] = React.useState(null);
+  const [heroScrolled, setHeroScrolled] = React.useState(false);
+  const [systemPrimaryColor, setSystemPrimaryColor] = React.useState("#2563eb");
 
   useEffect(() => {
     // Aplicar aparência em cache imediatamente para evitar flash
@@ -66,7 +68,10 @@ export default function Layout({ children, currentPageName }) {
         if (cachedAppearance) {
           const parsed = JSON.parse(cachedAppearance);
           applyAppearanceColors(parsed);
-          if (parsed.primaryColor) setHeroPrimaryColor(parsed.primaryColor);
+          if (parsed.primaryColor) {
+            setHeroPrimaryColor(parsed.primaryColor);
+            setSystemPrimaryColor(parsed.primaryColor);
+          }
           if (parsed.secondaryColor) setHeroSecondaryColor(parsed.secondaryColor);
         }
         hasAppliedCachedTheme.current = true;
@@ -149,6 +154,40 @@ export default function Layout({ children, currentPageName }) {
       clearInterval(interval);
     };
   }, []);
+
+  // Detectar quando o Hero foi completamente rolado (apenas na página Home)
+  useEffect(() => {
+    if (currentPageName !== "Home" && currentPageName !== "home") {
+      setHeroScrolled(false);
+      return;
+    }
+
+    const handleScroll = () => {
+      // Encontrar o elemento Hero
+      const heroElement = document.querySelector('[data-hero-section]');
+      if (!heroElement) {
+        // Se não encontrar pelo data attribute, tentar encontrar pela classe ou estrutura
+        const heroSection = document.querySelector('section, [class*="hero"], [class*="Hero"]');
+        if (heroSection) {
+          const heroBottom = heroSection.getBoundingClientRect().bottom;
+          setHeroScrolled(heroBottom <= 0);
+        }
+        return;
+      }
+
+      const heroBottom = heroElement.getBoundingClientRect().bottom;
+      // Quando o Hero sair completamente da viewport (bottom <= 0), considerar rolado
+      setHeroScrolled(heroBottom <= 0);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    // Verificar estado inicial
+    handleScroll();
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [currentPageName, location.pathname]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -276,8 +315,8 @@ export default function Layout({ children, currentPageName }) {
       setIsAdmin(userData.role === "admin");
       return true; // Retornar true para indicar sucesso
     } catch (error) {
-      // Erro 401/403 é esperado quando usuário não está logado ou token expirou - não logar no console
-      if (error.status !== 401 && error.status !== 403 && !error.silent) {
+      // Erro 401/403/429 é esperado quando usuário não está logado, token expirou ou há rate limit - não logar no console
+      if (error.status !== 401 && error.status !== 403 && error.status !== 429 && !error.silent) {
         console.error("Erro ao verificar autenticação:", error);
       }
       setUser(null);
@@ -336,8 +375,11 @@ export default function Layout({ children, currentPageName }) {
       };
       
       // Salvar cores do Hero para usar no header
-      setHeroPrimaryColor(allSettings.primary_color?.value || "#2563eb");
-      setHeroSecondaryColor(allSettings.secondary_color?.value || "#06b6d4");
+      const primaryColor = allSettings.primary_color?.value || "#2563eb";
+      const secondaryColor = allSettings.secondary_color?.value || "#06b6d4";
+      setHeroPrimaryColor(primaryColor);
+      setHeroSecondaryColor(secondaryColor);
+      setSystemPrimaryColor(primaryColor);
       
       // Aplicar todas as cores
       applyAppearanceColors(appearance);
@@ -595,13 +637,17 @@ export default function Layout({ children, currentPageName }) {
   let headerBackground = '';
   let headerTextColor = '#1f2937'; // padrão escuro
   
-  // Prioridade: 1. Cores da campanha (se estiver na rota de campanha), 2. Tema da loja, 3. Gradiente do Hero, 4. Azul padrão, 5. Branco
+  // Prioridade: 1. Cores da campanha (se estiver na rota de campanha), 2. Tema da loja, 3. Hero rolado (cor do sistema), 4. Gradiente do Hero, 5. Azul padrão, 6. Branco
   if (campaignColors && isCampaignPage) {
     headerBackground = campaignColors.badgeColor;
     headerTextColor = getContrastTextColor(campaignColors.badgeColor);
   } else if (storeTheme) {
     headerBackground = storeTheme.header;
     headerTextColor = getContrastTextColor(storeTheme.header);
+  } else if (heroScrolled && (currentPageName === "Home" || currentPageName === "home")) {
+    // Quando o Hero foi rolado na página Home, usar cor do sistema
+    headerBackground = systemPrimaryColor;
+    headerTextColor = getContrastTextColor(systemPrimaryColor);
   } else if (shouldUseHeroGradient) {
     headerBackground = `linear-gradient(to right, ${heroPrimaryColor}, ${heroSecondaryColor})`;
     // Para gradiente, usar a cor primária para calcular contraste
@@ -624,7 +670,7 @@ export default function Layout({ children, currentPageName }) {
           color: headerTextColor
         }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[95%] 2xl:max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               {isHeaderBlue && storeTheme && storeOnlineStoreInfo ? (

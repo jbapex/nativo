@@ -38,6 +38,7 @@ import categoryAttributesRoutes from './routes/categoryAttributes.js';
 import mercadopagoRoutes from './routes/mercadopago.js';
 import paymentsRoutes from './routes/payments.js';
 import userAddressesRoutes from './routes/user-addresses.js';
+import appearanceTemplatesRoutes from './routes/appearanceTemplates.js';
 
 dotenv.config();
 
@@ -105,14 +106,15 @@ app.use(cors(corsOptions));
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutos
   max: isDevelopment 
-    ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000 // 1000 requests em desenvolvimento
+    ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 5000 // 5000 requests em desenvolvimento
     : parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // 100 requests em produção
   message: { error: 'Muitas requisições deste IP, tente novamente mais tarde.' },
   standardHeaders: true,
   legacyHeaders: false,
   skip: (req) => {
-    // Pular rate limiting para arquivos estáticos (uploads)
-    return req.path.startsWith('/api/upload/uploads/');
+    // Pular rate limiting para arquivos estáticos (uploads) e health checks
+    return req.path.startsWith('/api/upload/uploads/') || 
+           req.path.startsWith('/api/health');
   }
 });
 app.use('/api/', limiter);
@@ -207,6 +209,7 @@ app.use('/api/category-attributes', categoryAttributesRoutes);
 app.use('/api/payments', paymentsRoutes);
 app.use('/api/mercadopago', mercadopagoRoutes);
 app.use('/api/user-addresses', userAddressesRoutes);
+app.use('/api/appearance-templates', appearanceTemplatesRoutes);
 
 // Rota de health check geral
 app.get('/api/health', (req, res) => {

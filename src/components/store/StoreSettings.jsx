@@ -329,7 +329,7 @@ export default function StoreSettings({ store, user, subscription, plan, onUpdat
 
   const handleSubmit = async (e) => {
     if (e) {
-      e.preventDefault();
+    e.preventDefault();
       e.stopPropagation();
     }
     

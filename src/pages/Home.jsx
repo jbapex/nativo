@@ -559,7 +559,7 @@ export default function Home() {
       <Hero appearanceSettings={appearanceSettings} />
       
       <motion.div 
-          className="w-full max-w-[95%] 2xl:max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6 py-8"
+          className="w-full max-w-[95%] 2xl:max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6 py-6"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
@@ -577,6 +577,21 @@ export default function Home() {
               Tentar Novamente
             </Button>
           </Alert>
+        )}
+
+        {/* Banners Promocionais */}
+        {appearanceSettings.banners && appearanceSettings.banners.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="mb-6"
+          >
+            <PromotionalBanners 
+              banners={appearanceSettings.banners} 
+              appearanceSettings={appearanceSettings}
+            />
+          </motion.div>
         )}
 
         {/* Seletor de Cidade */}
@@ -634,21 +649,6 @@ export default function Home() {
           appearanceSettings={appearanceSettings}
         />
 
-        {/* Banners Promocionais */}
-        {appearanceSettings.banners && appearanceSettings.banners.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.05 }}
-            className="mb-8"
-          >
-            <PromotionalBanners 
-              banners={appearanceSettings.banners} 
-              appearanceSettings={appearanceSettings}
-            />
-          </motion.div>
-        )}
-
         {/* Seção de Campanhas */}
         {!searchTerm && category === "todos" && (
           <CampaignsSection appearanceSettings={appearanceSettings} />
@@ -664,7 +664,8 @@ export default function Home() {
             >
               <Categories 
                 categories={allCategories} 
-                onSelect={handleCategoryChange} 
+                onSelect={handleCategoryChange}
+                appearanceSettings={appearanceSettings}
               />
             </motion.div>
 
@@ -674,7 +675,7 @@ export default function Home() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <FeaturedStores stores={featuredStores} />
+                <FeaturedStores stores={featuredStores} appearanceSettings={appearanceSettings} />
               </motion.div>
             )}
             
@@ -684,7 +685,7 @@ export default function Home() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <FeaturedStores stores={allStores} />
+                <FeaturedStores stores={allStores} appearanceSettings={appearanceSettings} />
               </motion.div>
             )}
 
@@ -694,7 +695,8 @@ export default function Home() {
               transition={{ delay: 0.3 }}
             >
               <FeaturedProducts 
-                products={products.filter(p => (p.active === true || p.active === 1) && p.featured).slice(0, 8)} 
+                products={products.filter(p => (p.active === true || p.active === 1) && p.featured).slice(0, 8)}
+                appearanceSettings={appearanceSettings}
               />
             </motion.div>
 
@@ -794,7 +796,7 @@ export default function Home() {
               transition={{ delay: 0.4 }}
               className="mb-16"
             >
-              <Testimonials />
+              <Testimonials appearanceSettings={appearanceSettings} />
             </motion.div>
           </>
         )}
@@ -805,30 +807,14 @@ export default function Home() {
           transition={{ delay: 0.2 }}
           className="mb-16"
         >
-          <div className="mb-4 flex flex-wrap items-center gap-3">
-            {selectedCityId && (
+          {selectedCityId && (
+            <div className="mb-4">
               <Badge className="bg-blue-100 text-blue-800 border-blue-200">
                 <MapPin className="w-3 h-3 mr-1" />
                 Produtos de {getSelectedCityName()}
               </Badge>
-            )}
-            
-            {products.some(p => p.campaign) && (
-              <Button
-                variant={showCampaignOnly ? "default" : "outline"}
-                size="sm"
-                onClick={() => setShowCampaignOnly(!showCampaignOnly)}
-                className={showCampaignOnly ? "bg-red-500 hover:bg-red-600 text-white" : ""}
-              >
-                <Megaphone className="w-4 h-4 mr-2" />
-                {showCampaignOnly ? "Mostrar Todos" : "Apenas Campanhas"}
-              </Button>
-            )}
-            
-            <span className="text-sm text-gray-600">
-              {filteredProducts.length} {filteredProducts.length === 1 ? 'produto encontrado' : 'produtos encontrados'}
-            </span>
-          </div>
+            </div>
+          )}
           <ProductGrid 
             products={filteredProducts}
             loading={loading}

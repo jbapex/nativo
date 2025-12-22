@@ -3,6 +3,12 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
 
+// Cache para requisições de autenticação (evita múltiplas chamadas simultâneas)
+let authMePromise = null;
+let authMeCache = null;
+let authMeCacheTime = 0;
+const AUTH_CACHE_DURATION = 5000; // 5 segundos
+
 // Verificar saúde do banco antes de requisições críticas
 async function checkDatabaseHealth() {
   try {
@@ -16,7 +22,7 @@ async function checkDatabaseHealth() {
 }
 
 // Função auxiliar para fazer requisições
-async function request(endpoint, options = {}) {
+export async function request(endpoint, options = {}) {
   const token = localStorage.getItem('auth_token');
   
   const config = {
@@ -31,11 +37,18 @@ async function request(endpoint, options = {}) {
   let response;
   try {
     // Para operações críticas (POST, PUT, DELETE), verificar saúde do banco
+    // Mas não bloquear se o health check falhar (pode ser rate limit)
     const isCriticalOperation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(options.method);
     if (isCriticalOperation) {
-      const dbHealthy = await checkDatabaseHealth();
-      if (!dbHealthy) {
-        throw new Error('Banco de dados não está disponível no momento. Tente novamente em alguns instantes.');
+      try {
+        const dbHealthy = await checkDatabaseHealth();
+        if (!dbHealthy) {
+          // Não bloquear, apenas logar aviso
+          console.warn('⚠️ Health check do banco falhou, mas continuando com a requisição');
+        }
+      } catch (healthError) {
+        // Ignorar erros do health check (pode ser rate limit)
+        console.warn('⚠️ Não foi possível verificar saúde do banco:', healthError.message);
       }
     }
     
@@ -114,6 +127,27 @@ async function request(endpoint, options = {}) {
       const error = await response.json().catch(() => ({ error: 'Acesso negado' }));
       const err = new Error(error.error || 'Acesso negado');
       err.status = response.status;
+      
+      // Se for o endpoint /auth/me e não houver token, marcar como silencioso
+      // (é esperado que retorne 403 quando o usuário não está autenticado)
+      if (endpoint === '/auth/me' && !token) {
+        err.silent = true;
+      }
+      
+      throw err;
+    }
+    
+    // Para 429 (rate limit), marcar como silencioso se for /auth/me
+    // (múltiplos componentes podem fazer a mesma requisição ao carregar a página)
+    if (response.status === 429) {
+      const error = await response.json().catch(() => ({ error: 'Muitas requisições' }));
+      const err = new Error(error.error || 'Muitas requisições');
+      err.status = response.status;
+      
+      if (endpoint === '/auth/me') {
+        err.silent = true;
+      }
+      
       throw err;
     }
     
@@ -192,7 +226,43 @@ export const Auth = {
       err.silent = true;
       throw err;
     }
-    return request('/auth/me');
+    
+    // Verificar cache
+    const now = Date.now();
+    if (authMeCache && (now - authMeCacheTime) < AUTH_CACHE_DURATION) {
+      return authMeCache;
+    }
+    
+    // Se já existe uma requisição em andamento, aguardar ela
+    if (authMePromise) {
+      try {
+        return await authMePromise;
+      } catch (error) {
+        // Se a requisição em andamento falhar, limpar cache e relançar erro
+        authMePromise = null;
+        throw error;
+      }
+    }
+    
+    // Criar nova requisição e cachear
+    authMePromise = request('/auth/me')
+      .then((data) => {
+        authMeCache = data;
+        authMeCacheTime = now;
+        authMePromise = null;
+        return data;
+      })
+      .catch((error) => {
+        authMePromise = null;
+        // Limpar cache em caso de erro
+        if (error.status === 401 || error.status === 403) {
+          authMeCache = null;
+          authMeCacheTime = 0;
+        }
+        throw error;
+      });
+    
+    return authMePromise;
   },
 
   // Atualizar dados do usuário

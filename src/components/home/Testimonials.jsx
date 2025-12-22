@@ -28,7 +28,7 @@ const TESTIMONIALS = [
   }
 ];
 
-export default function Testimonials() {
+export default function Testimonials({ appearanceSettings = {} }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isMobile, setIsMobile] = useState(false);
 
@@ -55,24 +55,24 @@ export default function Testimonials() {
 
   const TestimonialCard = ({ testimonial }) => (
     <Card className="h-full">
-      <CardContent className="p-6 flex flex-col h-full">
-        <div className="mb-4 text-blue-500">
-          <Quote className="w-10 h-10 opacity-20" />
+      <CardContent className="p-4 sm:p-5 flex flex-col h-full">
+        <div className="mb-3 text-blue-500">
+          <Quote className="w-8 h-8 opacity-20" />
         </div>
         
-        <p className="text-gray-700 mb-6 flex-grow">
+        <p className="text-sm text-gray-700 mb-4 flex-grow leading-relaxed">
           "{testimonial.quote}"
         </p>
         
-        <div className="flex items-center gap-3 mt-auto pt-4 border-t">
+        <div className="flex items-center gap-2.5 mt-auto pt-3 border-t">
           <img 
             src={testimonial.avatar}
             alt={testimonial.name}
-            className="w-12 h-12 rounded-full object-cover"
+            className="w-10 h-10 rounded-full object-cover"
           />
           <div>
-            <h4 className="font-semibold">{testimonial.name}</h4>
-            <p className="text-sm text-gray-500">{testimonial.role}</p>
+            <h4 className="font-medium text-sm">{testimonial.name}</h4>
+            <p className="text-xs text-gray-500">{testimonial.role}</p>
           </div>
           
           <div className="ml-auto flex">
@@ -94,9 +94,14 @@ export default function Testimonials() {
 
   return (
     <div className="mb-12">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl md:text-3xl font-bold mb-4">O que dizem sobre nós</h2>
-        <p className="text-gray-500 max-w-2xl mx-auto">
+      <div className="text-center mb-6">
+        <h2 
+          className="text-xl sm:text-2xl font-bold mb-2"
+          style={{ color: appearanceSettings?.primaryColor || appearanceSettings?.buttonPrimaryColor || '#2563eb' }}
+        >
+          O que dizem sobre nós
+        </h2>
+        <p className="text-xs sm:text-sm text-gray-500 max-w-2xl mx-auto">
           Histórias reais de lojistas e compradores que fazem parte da comunidade NATIVO
         </p>
       </div>
@@ -149,7 +154,7 @@ export default function Testimonials() {
           </div>
         </div>
       ) : (
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-3 gap-4">
           {TESTIMONIALS.map((testimonial, index) => (
             <motion.div
               key={index}

@@ -10,10 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertCircle, Check, Globe, Key, MailIcon, Save, Settings, Users, Wallet, Wrench, Store, Palette, Image, ArrowUpDown, Eye, Plus, Trash2, GripVertical } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { toast } from "sonner";
 import { Settings as SettingsAPI } from "@/api/entities-local";
 import { useVisualEditor } from "@/components/admin/VisualColorEditor";
 import { User } from "@/api/entities";
 import { UploadFile } from "@/api/integrations";
+import AppearanceTemplatesManager from "@/components/admin/AppearanceTemplatesManager";
 
 export default function AdminSettings() {
   const [activeTab, setActiveTab] = useState("general");
@@ -1431,6 +1433,22 @@ export default function AdminSettings() {
           </TabsContent>
 
           <TabsContent value="appearance" className="space-y-6">
+            {/* Gerenciador de Templates */}
+            <AppearanceTemplatesManager
+              currentSettings={settings}
+              onApplyTemplate={(templateSettings) => {
+                // Aplicar template nas configurações
+                setSettings(prev => ({
+                  ...prev,
+                  appearance: {
+                    ...prev.appearance,
+                    ...templateSettings.appearance
+                  }
+                }));
+                toast.success('Template aplicado! Não esqueça de salvar as alterações.');
+              }}
+            />
+
             <Card>
               <CardHeader>
                 <CardTitle>Logo e Favicon</CardTitle>

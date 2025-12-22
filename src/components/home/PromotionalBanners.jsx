@@ -43,7 +43,7 @@ export default function PromotionalBanners({ banners = [], appearanceSettings = 
 
   return (
     <div className="relative w-full mb-8 overflow-hidden rounded-xl shadow-lg">
-      <div className="relative h-64 md:h-80 lg:h-96">
+      <div className="relative h-32 sm:h-40 md:h-48 lg:h-56 xl:h-64">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentIndex}
@@ -65,14 +65,14 @@ export default function PromotionalBanners({ banners = [], appearanceSettings = 
                 />
                 {(activeBanners[currentIndex].title || activeBanners[currentIndex].subtitle) && (
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex items-end">
-                    <div className="w-full p-6 md:p-8 text-white">
+                    <div className="w-full p-3 sm:p-4 md:p-6 text-white">
                       {activeBanners[currentIndex].title && (
-                        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2">
+                        <h2 className="text-sm sm:text-base md:text-lg lg:text-xl font-bold mb-1">
                           {activeBanners[currentIndex].title}
                         </h2>
                       )}
                       {activeBanners[currentIndex].subtitle && (
-                        <p className="text-lg md:text-xl text-white/90">
+                        <p className="text-xs sm:text-sm md:text-base text-white/90">
                           {activeBanners[currentIndex].subtitle}
                         </p>
                       )}
@@ -92,14 +92,14 @@ export default function PromotionalBanners({ banners = [], appearanceSettings = 
                 />
                 {(activeBanners[currentIndex].title || activeBanners[currentIndex].subtitle) && (
                   <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent flex items-end">
-                    <div className="w-full p-6 md:p-8 text-white">
+                    <div className="w-full p-3 sm:p-4 md:p-6 text-white">
                       {activeBanners[currentIndex].title && (
-                        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold mb-2">
+                        <h2 className="text-sm sm:text-base md:text-lg lg:text-xl font-bold mb-1">
                           {activeBanners[currentIndex].title}
                         </h2>
                       )}
                       {activeBanners[currentIndex].subtitle && (
-                        <p className="text-lg md:text-xl text-white/90">
+                        <p className="text-xs sm:text-sm md:text-base text-white/90">
                           {activeBanners[currentIndex].subtitle}
                         </p>
                       )}
@@ -116,29 +116,29 @@ export default function PromotionalBanners({ banners = [], appearanceSettings = 
           <>
             <button
               onClick={goToPrevious}
-              className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg transition-all z-10"
+              className="absolute left-2 sm:left-4 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1.5 sm:p-2 shadow-lg transition-all z-10"
               aria-label="Banner anterior"
             >
-              <ChevronLeft className="w-6 h-6" style={{ color: appearanceSettings.primaryColor || '#2563eb' }} />
+              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: appearanceSettings.primaryColor || '#2563eb' }} />
             </button>
             <button
               onClick={goToNext}
-              className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-2 shadow-lg transition-all z-10"
+              className="absolute right-2 sm:right-4 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white rounded-full p-1.5 sm:p-2 shadow-lg transition-all z-10"
               aria-label="Próximo banner"
             >
-              <ChevronRight className="w-6 h-6" style={{ color: appearanceSettings.primaryColor || '#2563eb' }} />
+              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: appearanceSettings.primaryColor || '#2563eb' }} />
             </button>
 
             {/* Indicadores de página */}
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex gap-2 z-10">
+            <div className="absolute bottom-2 sm:bottom-4 left-1/2 transform -translate-x-1/2 flex gap-1.5 sm:gap-2 z-10">
               {activeBanners.map((_, index) => (
                 <button
                   key={index}
                   onClick={() => goToSlide(index)}
-                  className={`h-2 rounded-full transition-all ${
+                  className={`h-1.5 sm:h-2 rounded-full transition-all ${
                     index === currentIndex 
-                      ? 'w-8 bg-white' 
-                      : 'w-2 bg-white/50 hover:bg-white/75'
+                      ? 'w-6 sm:w-8 bg-white' 
+                      : 'w-1.5 sm:w-2 bg-white/50 hover:bg-white/75'
                   }`}
                   aria-label={`Ir para banner ${index + 1}`}
                 />

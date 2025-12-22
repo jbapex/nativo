@@ -35,7 +35,8 @@ const ICON_MAP = {
   "Palette": Palette
 };
 
-export default function Categories({ onSelect, categories = [] }) {
+export default function Categories({ onSelect, categories = [], appearanceSettings = {} }) {
+  const primaryColor = appearanceSettings?.primaryColor || appearanceSettings?.buttonPrimaryColor || '#2563eb';
   // Fallback to default categories if none provided
   const displayCategories = categories.length > 0 ? 
     categories.slice(0, 12) : 
@@ -79,14 +80,17 @@ export default function Categories({ onSelect, categories = [] }) {
 
   return (
     <div className="mb-12">
-      <h2 className="text-2xl font-bold mb-6 flex items-center">
+      <h2 
+        className="text-xl sm:text-2xl font-bold mb-4 flex items-center"
+        style={{ color: primaryColor }}
+      >
         Explorar Categorias
-        <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full ml-3">
+        <span className="inline-block bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded-full ml-2">
           {sortedCategories.length}
         </span>
       </h2>
       
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
         {sortedCategories.map((category, index) => {
           // Choose an icon component based on the icon name, or default to ShoppingBag
           const IconComponent = category.icon && ICON_MAP[category.icon] ? ICON_MAP[category.icon] : ShoppingBag;
@@ -106,11 +110,11 @@ export default function Categories({ onSelect, categories = [] }) {
                 className="cursor-pointer hover:shadow-md transition-all border-transparent hover:border-blue-100 overflow-hidden"
                 onClick={() => onSelect(category.slug)}
               >
-                <CardContent className="p-4 text-center">
-                  <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${gradient} mx-auto mb-3 flex items-center justify-center shadow-md transform hover:scale-110 transition-transform duration-300`}>
-                    <IconComponent className="w-6 h-6 text-white" />
+                <CardContent className="p-3 text-center">
+                  <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${gradient} mx-auto mb-2 flex items-center justify-center shadow-md transform hover:scale-110 transition-transform duration-300`}>
+                    <IconComponent className="w-5 h-5 text-white" />
                   </div>
-                  <h3 className="text-sm font-medium line-clamp-1">{category.name}</h3>
+                  <h3 className="text-xs font-medium line-clamp-1">{category.name}</h3>
                 </CardContent>
               </Card>
             </motion.div>

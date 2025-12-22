@@ -67,7 +67,7 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
       else if (width >= 1024) setProductsPerView(5); // lg - 5 produtos
       else if (width >= 768) setProductsPerView(4); // md - 4 produtos
       else if (width >= 640) setProductsPerView(3); // sm - 3 produtos
-      else setProductsPerView(2); // mobile - 2 produtos
+      else setProductsPerView(3); // mobile - 3 produtos (alterado de 2 para 3)
     };
 
     updateProductsPerView();
@@ -173,7 +173,9 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
     if (products.length <= productsPerView) return;
     setCurrentIndex((prev) => {
       const nextIndex = prev + productsPerView;
-      if (nextIndex >= products.length) {
+      // Garantir que não ultrapasse o limite e sempre mostre produtos completos
+      const maxIndex = products.length - productsPerView;
+      if (nextIndex > maxIndex) {
         return 0; // Voltar ao início
       }
       return nextIndex;
@@ -185,7 +187,8 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
     setCurrentIndex((prev) => {
       const prevIndex = prev - productsPerView;
       if (prevIndex < 0) {
-        const lastGroupIndex = Math.floor((products.length - 1) / productsPerView) * productsPerView;
+        // Ir para o último grupo que mostra produtos completos
+        const lastGroupIndex = Math.max(0, products.length - productsPerView);
         return lastGroupIndex;
       }
       return prevIndex;
@@ -198,31 +201,80 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
 
   const badgeColor = campaign.badge_color || "#EF4444";
   const canNavigate = products.length > productsPerView;
+  const primaryColor = appearanceSettings?.primaryColor || appearanceSettings?.buttonPrimaryColor || '#2563eb';
   
-  // Calcular o deslocamento X para a animação
+  // Calcular o deslocamento X para a animação - garantir que não corte produtos
+  // O translateX deve mover exatamente o número de produtos visíveis por vez
+  // Cada movimento deve mostrar produtosPerView produtos completos
   const containerWidthFactor = products.length / productsPerView;
-  const translateX = (currentIndex / productsPerView) * (100 / containerWidthFactor);
+  const translateX = (currentIndex / products.length) * 100;
 
   return (
-    <div className="w-full">
+    <div className="w-full" style={{
+      opacity: 1,
+      borderRadius: '0px',
+      paddingLeft: '0',
+      paddingRight: '0'
+    }}>
       {/* Carrossel com setas */}
-      <div className="relative px-8 sm:px-10 md:px-12">
+      <div className="relative w-full flex items-center" style={{ 
+        display: 'flex',
+        flexDirection: 'row',
+        flexWrap: 'nowrap',
+        width: '100%',
+        paddingTop: '20px',
+        paddingBottom: '20px'
+      }}>
         {canNavigate && (
           <button
             onClick={prevSlide}
-            className="absolute left-0 sm:left-2 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full p-1.5 sm:p-2 shadow-lg hover:bg-gray-100 transition-colors"
+            className="flex-shrink-0 shadow-md transition-all hover:scale-110 hover:opacity-100 flex items-center justify-center z-20 -ml-1"
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.8)',
+              color: primaryColor,
+              width: '1.5rem',
+              height: '2rem',
+              flexShrink: 0,
+              opacity: 0.7,
+              border: `1px solid ${primaryColor}20`,
+              borderRight: 'none',
+              borderTopLeftRadius: '9999px',
+              borderBottomLeftRadius: '9999px',
+              paddingLeft: '0.25rem',
+              paddingRight: '0.125rem'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = primaryColor;
+              e.currentTarget.style.color = '#ffffff';
+              e.currentTarget.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+              e.currentTarget.style.color = primaryColor;
+              e.currentTarget.style.opacity = '0.7';
+            }}
             aria-label="Produtos anteriores"
           >
-            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+            <ArrowLeft className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
           </button>
         )}
 
-        <div className="overflow-hidden w-full">
+        <div className="overflow-hidden flex-1" style={{
+          width: '100%',
+          maxWidth: '100%',
+          overflow: 'hidden',
+          position: 'relative',
+          flex: 1
+        }}>
           <motion.div 
             className="flex"
             style={{ 
               gap: isSmallScreen ? '0.5rem' : '0.75rem',
-              width: `${(products.length / productsPerView) * 100}%`
+              width: `${(products.length / productsPerView) * 100}%`,
+              flexDirection: 'row',
+              flexWrap: 'nowrap',
+              display: 'flex',
+              willChange: 'transform'
             }}
             animate={{ 
               x: `-${translateX}%`
@@ -237,11 +289,12 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
               const finalPrice = product.campaign?.promo_price || product.price;
               const primaryColor = appearanceSettings?.primaryColor || appearanceSettings?.buttonPrimaryColor || '#2563eb';
 
-              // Calcular largura correta para cada card
+              // Calcular largura correta para cada card - garantir que não corte
+              // A largura deve ser calculada em relação ao container interno (motion.div)
               const gap = isSmallScreen ? 0.5 : 0.75; // rem
-              const containerWidthFactor = products.length / productsPerView;
-              const totalGap = (productsPerView - 1) * gap;
-              const cardWidth = `calc(((100% - ${totalGap}rem) / ${productsPerView}) / ${containerWidthFactor})`;
+              const totalGap = (products.length - 1) * gap;
+              // Cada card ocupa 1/products.length do container interno
+              const cardWidth = `calc((100% - ${totalGap}rem) / ${products.length})`;
 
               return (
                 <div
@@ -249,7 +302,9 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
                   className="flex-shrink-0"
                   style={{ 
                     width: cardWidth,
-                    minWidth: 0
+                    minWidth: 0,
+                    flexShrink: 0,
+                    flexGrow: 0
                   }}
                 >
               <Link 
@@ -285,17 +340,23 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
                         const b = parseInt(hex.substr(4, 2), 16);
                         e.currentTarget.style.borderColor = `rgba(${r}, ${g}, ${b}, 0.3)`;
                       }}>
-                  <div className="relative aspect-square overflow-hidden">
+                  <div className="relative aspect-square overflow-hidden bg-gray-50">
                     <img
                       src={product.images?.[0] || product.image_url || "https://placehold.co/400x400/e2e8f0/a1a1aa?text=Sem+Imagem"}
                       alt={product.name}
-                      className="w-full h-full object-cover group-hover:opacity-95 transition-opacity duration-200"
+                      className="w-full h-full group-hover:opacity-95 transition-opacity duration-200"
+                      style={{
+                        objectFit: 'cover',
+                        objectPosition: 'center',
+                        width: '100%',
+                        height: '100%'
+                      }}
                       loading="lazy"
                     />
                     
                     {/* Badge de Desconto Verde (estilo dos cards) */}
                     {discount > 0 && (
-                      <div className="absolute top-1 left-1 sm:top-1.5 sm:left-1.5 z-20 bg-green-600 flex items-center justify-center px-1 sm:px-1.5 py-0.5 rounded text-white font-semibold text-[9px] sm:text-[10px] leading-tight">
+                      <div className="absolute top-0.5 left-0.5 sm:top-1 sm:left-1 z-20 bg-green-600 flex items-center justify-center px-0.5 sm:px-1 py-0.25 sm:py-0.5 rounded text-white font-semibold text-[8px] sm:text-[9px] md:text-[10px] leading-tight whitespace-nowrap">
                         -{discount}%
                       </div>
                     )}
@@ -303,7 +364,7 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
                     {/* Badge de campanha */}
                     {product.campaign?.badge_text && (
                       <div 
-                        className="absolute top-1 right-1 sm:top-1.5 sm:right-1.5 px-1 sm:px-1.5 py-0.5 rounded text-white font-semibold text-[9px] sm:text-[10px]"
+                        className="absolute top-0.5 right-0.5 sm:top-1 sm:right-1 px-0.5 sm:px-1 py-0.25 sm:py-0.5 rounded text-white font-semibold text-[8px] sm:text-[9px] md:text-[10px] whitespace-nowrap truncate max-w-[60%]"
                         style={{ backgroundColor: badgeColor }}
                       >
                         {product.campaign.badge_text}
@@ -311,24 +372,24 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
                     )}
                   </div>
 
-                  <CardContent className="p-1.5 sm:p-2 md:p-2.5 space-y-0.5">
+                  <CardContent className="p-1 sm:p-1.5 md:p-2 space-y-0.5">
                     {/* Nome do Produto */}
                     {product.name && (
-                      <h3 className="font-medium text-[10px] sm:text-[11px] md:text-xs line-clamp-2 text-gray-900 leading-tight min-h-[1.75rem] sm:min-h-[2rem]">
+                      <h3 className="font-medium text-[9px] sm:text-[10px] md:text-[11px] line-clamp-2 text-gray-900 leading-tight break-words overflow-hidden">
                         {product.name}
                       </h3>
                     )}
                     
                     {/* Avaliação com Estrelas (estilo Havan) */}
                     {productRatings[product.id] && productRatings[product.id].total_reviews > 0 && (
-                      <div className="flex items-center gap-0.5 sm:gap-1">
+                      <div className="flex items-center gap-0.5 flex-wrap">
                         <div className="flex items-center gap-0.5">
                           {[1, 2, 3, 4, 5].map((star) => {
                             const avgRating = Number(productRatings[product.id].average_rating) || 0;
                             return (
                               <Star
                                 key={star}
-                                className={`w-2 h-2 sm:w-2.5 sm:h-2.5 ${
+                                className={`w-2 h-2 sm:w-2.5 sm:h-2.5 flex-shrink-0 ${
                                   star <= Math.round(avgRating)
                                     ? "text-yellow-400 fill-yellow-400"
                                     : "text-gray-300"
@@ -337,32 +398,32 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
                             );
                           })}
                         </div>
-                        <span className="text-[9px] sm:text-[10px] text-gray-500">
+                        <span className="text-[8px] sm:text-[9px] text-gray-500 whitespace-nowrap">
                           ({productRatings[product.id].total_reviews})
                         </span>
                       </div>
                     )}
                     
                     {/* Preços (estilo Havan - mais compacto) */}
-                    <div className="space-y-0.5">
+                    <div className="space-y-0">
                       {(product.compare_price && product.compare_price > finalPrice) || (product.campaign?.original_price && product.campaign.original_price > finalPrice) ? (
                         <>
-                          <span className="text-[9px] sm:text-[10px] text-gray-400 line-through block">
+                          <span className="text-[8px] sm:text-[9px] md:text-[10px] text-gray-400 line-through block truncate">
                             {formatCurrency(product.compare_price || product.campaign?.original_price || finalPrice)}
                           </span>
-                          <span className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 block">
+                          <span className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-gray-900 block truncate">
                             {formatCurrency(finalPrice)}
                           </span>
                         </>
                       ) : (
-                        <span className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 block">
+                        <span className="text-sm sm:text-base md:text-lg lg:text-xl font-bold text-gray-900 block truncate">
                           {formatCurrency(finalPrice)}
                         </span>
                       )}
                       
                       {/* Parcelamento (estilo Havan) */}
                       {finalPrice && (
-                        <span className="text-[9px] sm:text-[10px] text-gray-500 block">
+                        <span className="text-[8px] sm:text-[9px] md:text-[10px] text-gray-500 block truncate">
                           10x de {formatCurrency(finalPrice / 10)}
                         </span>
                       )}
@@ -379,10 +440,34 @@ export default function CampaignProductsCarousel({ campaign, appearanceSettings 
         {canNavigate && (
           <button
             onClick={nextSlide}
-            className="absolute right-0 sm:right-2 top-1/2 -translate-y-1/2 z-10 bg-white rounded-full p-1.5 sm:p-2 shadow-lg hover:bg-gray-100 transition-colors"
+            className="flex-shrink-0 shadow-md transition-all hover:scale-110 hover:opacity-100 flex items-center justify-center z-20 -mr-1"
+            style={{
+              backgroundColor: 'rgba(255, 255, 255, 0.8)',
+              color: primaryColor,
+              width: '1.5rem',
+              height: '2rem',
+              flexShrink: 0,
+              opacity: 0.7,
+              border: `1px solid ${primaryColor}20`,
+              borderLeft: 'none',
+              borderTopRightRadius: '9999px',
+              borderBottomRightRadius: '9999px',
+              paddingLeft: '0.125rem',
+              paddingRight: '0.25rem'
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = primaryColor;
+              e.currentTarget.style.color = '#ffffff';
+              e.currentTarget.style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.8)';
+              e.currentTarget.style.color = primaryColor;
+              e.currentTarget.style.opacity = '0.7';
+            }}
             aria-label="Próximos produtos"
           >
-            <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700" />
+            <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
           </button>
         )}
       </div>

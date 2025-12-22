@@ -296,7 +296,7 @@ export default function StoreOnline() {
         onSearch={handleSearch}
       />
 
-      <div className="w-full px-12 sm:px-16 lg:px-20 py-8">
+      <div className="w-full max-w-[98%] 2xl:max-w-[1920px] mx-auto px-2 sm:px-3 lg:px-4 py-8">
         {/* Botão de Filtros Mobile */}
         <div className="lg:hidden mb-4">
           <Button

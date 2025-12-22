@@ -59,48 +59,48 @@ function CampaignTimer({ endDate, badgeColor }) {
   }
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
       {/* Ícone de relógio e texto "TERMINA EM" */}
-      <div className="flex items-center gap-1.5">
-        <Clock className="w-4 h-4 text-gray-600" />
-        <span className="text-gray-600 font-medium text-sm">TERMINA EM</span>
+      <div className="flex items-center gap-1 sm:gap-1.5">
+        <Clock className="w-3 h-3 sm:w-4 sm:h-4 text-gray-600" />
+        <span className="text-gray-600 font-medium text-[10px] sm:text-xs">TERMINA EM</span>
       </div>
       
       {/* Módulo de Dias (apenas se houver dias) - formato "30D" */}
       {timeLeft.days > 0 && (
         <>
-          <div className="bg-black rounded px-2.5 py-1.5">
-            <span className="text-white font-bold text-sm tabular-nums">
+          <div className="bg-black rounded px-1.5 sm:px-2.5 py-1 sm:py-1.5">
+            <span className="text-white font-bold text-[10px] sm:text-xs tabular-nums">
               {timeLeft.days}D
             </span>
           </div>
-          <span className="text-gray-500 font-bold text-sm">:</span>
+          <span className="text-gray-500 font-bold text-[10px] sm:text-xs">:</span>
         </>
       )}
       
       {/* Módulo de Horas */}
-      <div className="bg-black rounded px-2.5 py-1.5">
-        <span className="text-white font-bold text-sm tabular-nums">
+      <div className="bg-black rounded px-1.5 sm:px-2.5 py-1 sm:py-1.5">
+        <span className="text-white font-bold text-[10px] sm:text-xs md:text-sm tabular-nums">
           {String(timeLeft.hours).padStart(2, '0')}H
         </span>
       </div>
       
       {/* Separador */}
-      <span className="text-gray-500 font-bold text-sm">:</span>
+      <span className="text-gray-500 font-bold text-[10px] sm:text-xs md:text-sm">:</span>
       
       {/* Módulo de Minutos */}
-      <div className="bg-black rounded px-2.5 py-1.5">
-        <span className="text-white font-bold text-sm tabular-nums">
+      <div className="bg-black rounded px-1.5 sm:px-2.5 py-1 sm:py-1.5">
+        <span className="text-white font-bold text-[10px] sm:text-xs md:text-sm tabular-nums">
           {String(timeLeft.minutes).padStart(2, '0')}M
         </span>
       </div>
       
       {/* Separador */}
-      <span className="text-gray-500 font-bold text-sm">:</span>
+      <span className="text-gray-500 font-bold text-[10px] sm:text-xs md:text-sm">:</span>
       
       {/* Módulo de Segundos */}
-      <div className="bg-black rounded px-2.5 py-1.5">
-        <span className="text-white font-bold text-sm tabular-nums">
+      <div className="bg-black rounded px-1.5 sm:px-2.5 py-1 sm:py-1.5">
+        <span className="text-white font-bold text-[10px] sm:text-xs md:text-sm tabular-nums">
           {String(timeLeft.seconds).padStart(2, '0')}
         </span>
       </div>
@@ -198,8 +198,7 @@ export default function CampaignsSection({ appearanceSettings = {} }) {
                 className="block mb-4 w-full"
               >
                 <div
-                  className="relative w-full rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
-                  style={{ height: '110px' }}
+                  className="relative w-full rounded-lg overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer h-20 sm:h-24 md:h-28 lg:h-32 xl:h-36"
                 >
                 {campaign.banner_image ? (
                   // Se tiver imagem cadastrada, mostrar apenas a imagem
@@ -221,7 +220,7 @@ export default function CampaignsSection({ appearanceSettings = {} }) {
                     {/* Badge da Campanha */}
                     {campaign.badge_text && (
                       <div
-                        className="absolute top-2 left-2 px-2 py-1 rounded text-white font-bold text-xs shadow-lg z-10"
+                        className="absolute top-1 left-1 sm:top-2 sm:left-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-white font-bold text-[10px] sm:text-xs shadow-lg z-10"
                         style={{ backgroundColor: badgeColor }}
                       >
                         {campaign.badge_text}
@@ -230,8 +229,8 @@ export default function CampaignsSection({ appearanceSettings = {} }) {
                     
                     {/* Texto da campanha sobre a imagem */}
                     {campaign.banner_text && (
-                      <div className="absolute bottom-2 left-2 right-2 z-10">
-                        <h3 className="text-lg font-bold text-white drop-shadow-lg">
+                      <div className="absolute bottom-1 left-1 right-1 sm:bottom-2 sm:left-2 sm:right-2 z-10">
+                        <h3 className="text-xs sm:text-sm md:text-base font-bold text-white drop-shadow-lg">
                           {campaign.banner_text}
                         </h3>
                       </div>
@@ -243,7 +242,7 @@ export default function CampaignsSection({ appearanceSettings = {} }) {
                     {/* Badge da Campanha */}
                     {campaign.badge_text && (
                       <div
-                        className="absolute top-2 left-2 px-2 py-1 rounded text-white font-bold text-xs shadow-lg z-10"
+                        className="absolute top-1 left-1 sm:top-2 sm:left-2 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded text-white font-bold text-[10px] sm:text-xs shadow-lg z-10"
                         style={{ backgroundColor: badgeColor }}
                       >
                         {campaign.badge_text}
@@ -251,8 +250,8 @@ export default function CampaignsSection({ appearanceSettings = {} }) {
                     )}
                     
                     {/* Conteúdo centralizado */}
-                    <div className="text-center text-white px-4">
-                      <h3 className="text-lg font-bold">
+                    <div className="text-center text-white px-2 sm:px-4">
+                      <h3 className="text-xs sm:text-sm md:text-base font-bold">
                         {campaign.banner_text || campaign.name || "Super Ofertas"}
                       </h3>
                     </div>
@@ -262,21 +261,15 @@ export default function CampaignsSection({ appearanceSettings = {} }) {
               </Link>
 
               {/* Quadro com Nome da Campanha e Carrossel */}
-              <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 w-full">
+              <div className="bg-white rounded-lg shadow-md p-1 sm:p-2 md:p-2 w-full">
                 {/* Cabeçalho com Nome da Campanha */}
-                <div className="flex items-center justify-between mb-4 sm:mb-6 px-0">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-2xl font-bold" style={{ color: badgeColor }}>
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 mb-1 sm:mb-2 px-1 sm:px-2">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 w-full sm:w-auto">
+                    <h3 className="text-base sm:text-lg md:text-xl font-bold" style={{ color: badgeColor }}>
                       {campaign.name}
                     </h3>
                     <CampaignTimer endDate={campaign.end_date} badgeColor={badgeColor} />
                   </div>
-                  <Link to={`/campanhas/${campaign.slug || campaign.id}`}>
-                    <Button variant="outline" className="flex items-center gap-2">
-                      Ver Todos
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  </Link>
                 </div>
 
                 {/* Carrossel de Produtos */}
@@ -284,6 +277,16 @@ export default function CampaignsSection({ appearanceSettings = {} }) {
                   campaign={campaign}
                   appearanceSettings={appearanceSettings}
                 />
+
+                {/* Botão Ver Todos embaixo dos cards */}
+                <div className="mt-2 sm:mt-3 flex justify-center">
+                  <Link to={`/campanhas/${campaign.slug || campaign.id}`}>
+                    <Button variant="outline" size="sm" className="flex items-center gap-2 text-xs sm:text-sm">
+                      Ver Todos
+                      <ArrowRight className="w-3 h-3 sm:w-4 sm:h-4" />
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </motion.div>
           );

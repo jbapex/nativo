@@ -686,7 +686,7 @@ export default function ProductDetail() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[95%] 2xl:max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6">
           <div className="animate-pulse">
             <div className="h-6 w-32 bg-gray-200 rounded mb-8"></div>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -813,7 +813,7 @@ export default function ProductDetail() {
       )}
       
       <div className="py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-[95%] 2xl:max-w-[1400px] mx-auto px-3 sm:px-4 lg:px-6">
           {/* Breadcrumbs */}
           <Breadcrumbs items={breadcrumbItems} showHome={!isFromStoreOnline} />
         
@@ -830,8 +830,8 @@ export default function ProductDetail() {
 
         {/* Card único com: Fotos, Preço, Quantidade, Frete, Botões e Loja */}
         <Card className="border-2 border-gray-200 shadow-sm">
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <CardContent className="p-4 sm:p-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
               {/* Coluna Esquerda: Fotos */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
@@ -871,7 +871,7 @@ export default function ProductDetail() {
                   <div className="flex gap-4 items-start">
                     {/* Miniaturas na lateral esquerda (vertical) */}
                     {imageList.length > 1 && (
-                      <div className="hidden md:flex flex-col gap-2 flex-shrink-0">
+                      <div className="hidden md:flex flex-col gap-3 flex-shrink-0">
                         {imageList.map((image, index) => (
                           <button
                             key={index}
@@ -879,7 +879,7 @@ export default function ProductDetail() {
                               e.stopPropagation();
                               setSelectedImage(index);
                             }}
-                            className={`w-20 h-20 rounded-md overflow-hidden border-2 transition-all duration-200 ${
+                            className={`w-24 h-24 lg:w-28 lg:h-28 rounded-lg overflow-hidden border-2 transition-all duration-200 ${
                               selectedImage === index 
                                 ? 'ring-2 shadow-md scale-105'
                                 : 'border-gray-200 opacity-70 hover:opacity-100 hover:border-gray-300'
@@ -893,6 +893,7 @@ export default function ProductDetail() {
                               src={image}
                               alt={`${product.name} - imagem ${index + 1}`}
                               className="w-full h-full object-cover"
+                              loading="lazy"
                             />
                           </button>
                         ))}
@@ -913,7 +914,9 @@ export default function ProductDetail() {
                     key={selectedImage}
                     src={imageList[selectedImage]}
                     alt={product.name}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                    loading="eager"
+                    style={{ minHeight: '450px', maxHeight: '600px' }}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
@@ -954,7 +957,7 @@ export default function ProductDetail() {
               
                   {/* Miniaturas horizontais para mobile */}
               {imageList.length > 1 && (
-                    <div className="md:hidden flex p-2 gap-2 overflow-x-auto">
+                    <div className="md:hidden flex p-2 gap-3 overflow-x-auto">
                   {imageList.map((image, index) => (
                     <button
                       key={index}
@@ -962,7 +965,7 @@ export default function ProductDetail() {
                             e.stopPropagation();
                             setSelectedImage(index);
                           }}
-                          className={`w-16 h-16 flex-shrink-0 rounded-md overflow-hidden border-2 transition-all duration-200 ${
+                          className={`w-20 h-20 flex-shrink-0 rounded-lg overflow-hidden border-2 transition-all duration-200 ${
                             selectedImage === index 
                               ? 'ring-2 shadow-md scale-105'
                               : 'border-gray-200 opacity-70 hover:opacity-100 hover:border-gray-300'
@@ -976,6 +979,7 @@ export default function ProductDetail() {
                         src={image}
                         alt={`${product.name} - imagem ${index + 1}`}
                         className="w-full h-full object-cover"
+                        loading="lazy"
                       />
                     </button>
                   ))}
@@ -1406,7 +1410,7 @@ export default function ProductDetail() {
         />
 
         {/* Seção de Informações do Produto com Abas */}
-        <Card className="border-2 border-gray-200 shadow-sm mt-8">
+        <Card className="border-2 border-gray-200 shadow-sm mt-6 lg:mt-8">
           <CardContent className="p-0">
             <Tabs defaultValue="description" className="w-full">
               <TabsList className="w-full justify-start rounded-none border-b border-gray-200 bg-white h-auto p-0">
@@ -1589,9 +1593,9 @@ export default function ProductDetail() {
             className="mt-8"
           >
             <Card className="border-2 border-gray-200 shadow-sm">
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <h2 className="text-2xl font-bold mb-6 text-gray-900">Produtos Relacionados</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
               {relatedProducts.map((relatedProduct) => {
                 // Se estiver dentro da loja, usar rota da loja
                 const productUrl = isFromStoreOnline && store 
@@ -1610,7 +1614,8 @@ export default function ProductDetail() {
                   <img
                     src={relatedProduct.images?.[0] || relatedProduct.image_url}
                     alt={relatedProduct.name}
-                    className="w-full h-40 object-cover"
+                    className="w-full h-48 sm:h-56 object-cover"
+                    loading="lazy"
                   />
                   <CardContent className="p-4">
                     <h3 className="font-medium line-clamp-1">{relatedProduct.name}</h3>

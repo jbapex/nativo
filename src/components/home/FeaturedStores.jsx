@@ -8,13 +8,20 @@ import { createPageUrl } from "@/utils";
 import { Link } from "react-router-dom";
 import { STORE_LOGO_PLACEHOLDER, handleImageError } from "@/utils/imagePlaceholder";
 
-export default function FeaturedStores({ stores }) {
+export default function FeaturedStores({ stores, appearanceSettings = {} }) {
   if (stores.length === 0) return null;
+
+  const primaryColor = appearanceSettings?.primaryColor || appearanceSettings?.buttonPrimaryColor || '#2563eb';
 
   return (
     <div className="mb-12" id="featured-stores">
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold">Lojas em Destaque</h2>
+        <h2 
+          className="text-xl sm:text-2xl font-bold"
+          style={{ color: primaryColor }}
+        >
+          Lojas em Destaque
+        </h2>
         <Link to={createPageUrl("Home?featured_stores=all")}>
           <Button variant="ghost" className="text-blue-600 hover:text-blue-700">
             Ver Todas <ArrowRight className="w-4 h-4 ml-2" />
@@ -32,16 +39,17 @@ export default function FeaturedStores({ stores }) {
           >
             <Link to={createPageUrl(`Store?id=${store.id}`)}>
               <Card className="overflow-hidden hover:shadow-lg transition-all duration-300">
-                <div className="relative h-32 bg-gradient-to-br from-blue-50 to-blue-100">
+                <div className="relative h-32 sm:h-36 bg-gradient-to-br from-blue-50 to-blue-100">
                   {store.store_banner ? (
                     <img
                       src={store.store_banner}
                       alt={store.store_name}
                       className="w-full h-full object-cover"
+                      loading="lazy"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
-                      <Store className="w-12 h-12 text-blue-400" />
+                      <Store className="w-16 h-16 text-blue-400" />
                     </div>
                   )}
                   <div className="absolute top-4 right-4">
@@ -65,8 +73,8 @@ export default function FeaturedStores({ stores }) {
                       />
                     </div>
                     <div className="flex-1">
-                      <h3 className="font-semibold text-lg">{store.store_name}</h3>
-                      <p className="text-sm text-gray-500 line-clamp-2">
+                      <h3 className="font-semibold text-sm sm:text-base">{store.store_name}</h3>
+                      <p className="text-xs text-gray-500 line-clamp-2">
                         {store.store_description || "Loja verificada no marketplace"}
                       </p>
                     </div>
