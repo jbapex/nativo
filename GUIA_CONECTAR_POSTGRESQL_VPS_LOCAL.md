@@ -31,7 +31,10 @@ ssh -L 5433:localhost:5432 seu-usuario@seu-servidor.com
 **Exemplo com suas credenciais:**
 
 ```bash
-ssh -L 5433:localhost:5432 root@nativo.contaae.online
+ssh -L 5433:localhost:5432 root@nativo.jbapex.com.br
+
+# Ou usando IP direto:
+ssh -L 5433:localhost:5432 root@72.60.151.155
 ```
 
 ### **Passo 2: Configurar .env Local**
@@ -90,7 +93,7 @@ Criar um script para facilitar:
 
 # Configurações
 VPS_USER="root"
-VPS_HOST="nativo.contaae.online"
+VPS_HOST="nativo.jbapex.com.br"
 LOCAL_PORT=5433
 REMOTE_PORT=5432
 
@@ -170,7 +173,7 @@ echo ""
 if ! nc -z localhost 5433 2>/dev/null; then
     echo "⚠️  Túnel SSH não detectado!"
     echo "📝 Execute em outro terminal:"
-    echo "   ssh -L 5433:localhost:5432 root@nativo.contaae.online"
+    echo "   ssh -L 5433:localhost:5432 root@nativo.jbapex.com.br"
     echo ""
     read -p "Pressione Enter quando o túnel estiver ativo..."
 fi
@@ -278,7 +281,7 @@ ssh-keygen -t ed25519 -C "seu-email@exemplo.com"
 ssh-copy-id root@nativo.contaae.online
 
 # Agora pode conectar sem senha
-ssh root@nativo.contaae.online
+ssh root@nativo.jbapex.com.br
 ```
 
 ### **3. Fechar Túnel Quando Não Usar**
@@ -309,7 +312,7 @@ npm run dev
 
 ```bash
 # Terminal 1: Criar túnel
-ssh -L 5433:localhost:5432 root@nativo.contaae.online
+ssh -L 5433:localhost:5432 root@nativo.jbapex.com.br
 
 # Terminal 2: Configurar e desenvolver
 cp backend/.env.vps backend/.env
@@ -331,7 +334,7 @@ npm run dev
 nc -z localhost 5433 && echo "✅ Túnel ativo" || echo "❌ Túnel inativo"
 
 # 2. Verificar PostgreSQL na VPS
-ssh root@nativo.contaae.online "sudo systemctl status postgresql"
+ssh root@nativo.jbapex.com.br "sudo systemctl status postgresql"
 ```
 
 ### **Erro: "password authentication failed"**
@@ -358,7 +361,7 @@ cat backend/.env | grep DB_
 
 ```bash
 # Verificar banco na VPS
-ssh root@nativo.contaae.online "psql -U nativo_user -d nativo_db -c '\l'"
+ssh root@nativo.jbapex.com.br "psql -U nativo_user -d nativo_db -c '\l'"
 ```
 
 ### **Túnel Fecha Automaticamente**
@@ -379,7 +382,7 @@ ssh -o ServerAliveInterval=60 -L 5433:localhost:5432 root@nativo.contaae.online
 ### **1. Criar Túnel SSH:**
 
 ```bash
-ssh -L 5433:localhost:5432 root@nativo.contaae.online
+ssh -L 5433:localhost:5432 root@nativo.jbapex.com.br
 ```
 
 ### **2. Configurar .env Local:**
