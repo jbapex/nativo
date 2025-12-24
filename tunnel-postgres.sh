@@ -6,7 +6,7 @@
 # Configurações (ajustar conforme necessário)
 VPS_USER="root"
 VPS_HOST="nativo.jbapex.com.br"
-LOCAL_PORT=5433
+LOCAL_PORT=5434
 REMOTE_PORT=5432
 
 # Cores
